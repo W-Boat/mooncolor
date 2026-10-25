@@ -1,0 +1,4 @@
+# KOReader 插件在设备上以 LF 换行发布，避免 Windows 全局 autocrlf 改写
+* text=auto eol=lf
+*.lua text eol=lf
+*.md text eol=lf
