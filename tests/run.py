@@ -10,7 +10,7 @@ from lupa.luajit21 import LuaRuntime
 lua = LuaRuntime(unpack_returned_tuples=True)
 moon = Path(os.environ.get('MOON_TEST_SOURCE', ROOT / 'work/moon')).as_posix()
 plugin = Path(os.environ.get('MOON_COLOR_TEST_PLUGIN', ROOT)).as_posix()
-TESTING_V21 = any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.1.0','2.2.0'])
+TESTING_V21 = any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.1.0','2.2.0','2.3.0'])
 lua.execute(f"package.path = '{moon}/tests/?.lua;{moon}/book.koplugin/?.lua;{moon}/book.koplugin/?/init.lua;{plugin}/?.lua;' .. package.path")
 BOOT = '''
 Kit = require("support.widget_stubs")
@@ -339,8 +339,12 @@ end)
 lua.execute((ROOT / 'tests/v2.lua').read_text(encoding='utf-8'))
 if TESTING_V21:
     lua.execute((ROOT / 'tests/v21.lua').read_text(encoding='utf-8'))
-    if '2.2.0' in Path(plugin, '_meta.lua').read_text(encoding='utf-8'):
+    if any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.2.0','2.3.0']):
         lua.execute((ROOT / 'tests/v22.lua').read_text(encoding='utf-8'))
+    if '2.3.0' in Path(plugin, '_meta.lua').read_text(encoding='utf-8'):
+        import hashlib
+        lua.globals().python_sha256 = lambda text: hashlib.sha256(text.encode('utf-8')).hexdigest()
+        lua.execute((ROOT / 'tests/v23.lua').read_text(encoding='utf-8'))
 results = [dict(item.items()) for item in lua.globals().results.values()]
 for scenario in ['rollback-and-retry', 'missing-moon']:
     vm = LuaRuntime(unpack_returned_tuples=True)

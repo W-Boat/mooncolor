@@ -9,6 +9,9 @@ function MoonColor:init()
         if Engine.install() then
             local owner = self.ui and (self.ui.book or self.ui.moon)
             Engine.refresh(owner and owner.desktop)
+            local Update=require("mooncolor_update")
+            Update.init(self.path)
+            if owner and owner.desktop then Update.schedule(owner.desktop)end
         end
     end)
 end
@@ -28,6 +31,8 @@ function MoonColor:addToMainMenu(items)
 end
 
 function MoonColor:onSuspend()
+    local update=package.loaded.mooncolor_update
+    if update then update.onSuspend()end
     local engine=package.loaded.mooncolor_engine
     if engine and engine.suspend then engine.suspend()end
 end
@@ -41,6 +46,14 @@ function MoonColor:onReaderReady()
 end
 function MoonColor:onCloseDocument()
     self:onReaderReady()
+end
+function MoonColor:onNetworkConnected()
+    local update=package.loaded.mooncolor_update
+    if update then update.schedule()end
+end
+function MoonColor:onExit()
+    local update=package.loaded.mooncolor_update
+    if update then update.onExit()end
 end
 
 return MoonColor

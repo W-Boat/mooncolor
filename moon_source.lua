@@ -81,12 +81,33 @@ local function entries(desktop)
                     require("ui/uimanager"):setDirty(desktop or "all", "full")
                 end),
             } }, { title="版本与更新",rows={
+                function(width)
+                    local Update=require("mooncolor_update")
+                    return require("ui.themes.widgets.row").widget{
+                        width=width,title="自动检查更新",icon="update",toggle=Update.autoEnabled(),
+                        subtitle="已联网时每天最多一次，不主动打开 Wi-Fi",
+                        callback=function()Update.setAuto(not Update.autoEnabled());Engine.refresh(desktop)end,
+                    }
+                end,
+                function(width)
+                    local Update=require("mooncolor_update")
+                    return require("ui.themes.widgets.row").widget{
+                        width=width,title="自动下载安装包",icon="download",toggle=Update.autoDownload(),
+                        subtitle="后台下载并校验，确认后才安装和重启",
+                        callback=function()Update.setAutoDownload(not Update.autoDownload());Engine.refresh(desktop)end,
+                    }
+                end,
                 action("Moon Color "..Engine.VERSION,"W-Boat/mooncolor · 当前版本",function()
                     require("ui.themes.widgets.qr"):new{title="Moon Color "..Engine.VERSION,
                         text="https://github.com/W-Boat/mooncolor",caption="项目主页"}:show()
                 end),
-                action("检查更新","复用月读异步网络请求，不在启动或绘制时联网",
-                    function()require("mooncolor_update").check()end),
+                function(width)
+                    local Update=require("mooncolor_update")
+                    return require("ui.themes.widgets.row").widget{
+                        width=width,title="检查更新 / 安装已下载版本",icon="system_update",status=Update.status(),
+                        callback=Update.manualCheck,
+                    }
+                end,
             } } }
         end },
     } }

@@ -1,5 +1,5 @@
 -- Moon Color, GPL-3.0-or-later. Moon-only color token adapter.
-local Engine = { ID = "ext.mooncolor", VERSION = "2.2.0", installed = false, revision = 0, suspended = false }
+local Engine = { ID = "ext.mooncolor", VERSION = "2.3.0", installed = false, revision = 0, suspended = false }
 local Themes = require("mooncolor_themes")
 local TAG = 0x1000000
 Engine.palettes, Engine.roles = Themes.presets, Themes.roles

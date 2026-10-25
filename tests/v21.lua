@@ -102,7 +102,7 @@ check("real-cover-queue-yields-input-reuses-cache-and-invalidates",function()
         return {stride=400,h=140}
     end}
     local boxes={}
-    local modern=Engine.VERSION=="2.2.0"
+    local modern=Engine.VERSION~="2.1.0"
     local total=modern and 10 or 3
     for i=1,total do boxes[i]=Core.widget{src="/cover"..i..".png",width=100,height=140}end
     assert(decoded==0 and #jobs==1)
@@ -155,7 +155,7 @@ check("cover-queue-knobs-and-toggle-restoration",function()
         end
     end
     for _,fn in pairs(Core)do if type(fn)=="function"then visit(fn)end end
-    if Engine.VERSION=="2.2.0"then
+    if Engine.VERSION~="2.1.0"then
         assert(values.BUDGET_MS==50 and values.YIELD_S==.1 and values.BITMAP_BUDGET==6*1024*1024)
         Engine.set("fast_covers",true)
         values,seen={},{}
@@ -168,7 +168,7 @@ check("cover-queue-knobs-and-toggle-restoration",function()
     values,seen={},{}
     for _,fn in pairs(Core)do if type(fn)=="function"then visit(fn)end end
     assert(values.BUDGET_MS==50 and values.YIELD_S==.1 and values.BITMAP_BUDGET==6*1024*1024)
-    Engine.set("fast_covers",Engine.VERSION~="2.2.0")
+    Engine.set("fast_covers",Engine.VERSION=="2.1.0")
 end)
 check("opening-notice-replacement-restores-constructor-on-error",function()
     local Reader=require("apps/reader/readerui")
@@ -209,7 +209,9 @@ check("update-semver-parsing-and-native-async-request",function()
     assert(U.newer("2.10.0","2.9.0") and not U.newer("2.1.0","2.1.0"))
     assert(not U.newer("bad","2.1.0"))
     local old=package.loaded.json
-    package.loaded.json={decode=function()return {tag_name="v2.2.0",body="更新"}end}
+    package.loaded.json={decode=function()return {tag_name="v2.2.0",body="更新",assets={{
+        name="mooncolor.koplugin-2.2.0.zip",size=123,digest="sha256:"..string.rep("a",64),
+        browser_download_url="https://github.com/W-Boat/mooncolor/releases/download/v2.2.0/mooncolor.koplugin-2.2.0.zip"}}}end}
     local release=assert(U.parse("json"));assert(release.version=="2.2.0")
     assert(release.url=="https://github.com/W-Boat/mooncolor/releases/tag/v2.2.0")
     package.loaded.json=old
