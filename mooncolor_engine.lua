@@ -1,5 +1,5 @@
 -- Moon Color, GPL-3.0-or-later. Moon-only color token adapter.
-local Engine = { ID = "ext.mooncolor", VERSION = "2.3.0", installed = false, revision = 0, suspended = false }
+local Engine = { ID = "ext.mooncolor", VERSION = "2.4.0", installed = false, revision = 0, suspended = false }
 local Themes = require("mooncolor_themes")
 local TAG = 0x1000000
 Engine.palettes, Engine.roles = Themes.presets, Themes.roles
@@ -11,9 +11,11 @@ local fallback, colors = {}, {}
 local cache = setmetatable({}, { __mode = "k" })
 local Settings, Device, BB
 local config_cache, role_tokens = nil, {}
+local tint_cache, foreground_cache = {}, {}
 
 function Engine.reload()
     config_cache, role_tokens = nil, {}
+    tint_cache, foreground_cache = {}, {}
     Engine.revision = Engine.revision + 1
     cache = setmetatable({}, { __mode = "k" })
 end
@@ -101,16 +103,29 @@ end
 
 function Engine.tint(weight, role)
     if not Engine.active() then return 0xEE end
+    role=role or "primary"
+    local values=tint_cache[role]
+    if not values then values={};tint_cache[role]=values end
+    if values[weight] then return values[weight] end
     local value = Engine.accentToken(role) - TAG
     local function mix(v) return math.floor(255 * (1-weight) + v * weight + 0.5) end
     local r, g, b = mix(math.floor(value/65536)), mix(math.floor(value/256)%256), mix(value%256)
-    return token(r*65536+g*256+b, math.floor(255*(1-weight)+0.5))
+    local result=token(r*65536+g*256+b, math.floor(255*(1-weight)+0.5))
+    -- Quantities in the UI are bounded, but arbitrary third-party weights need
+    -- not be. Limit this per-role memo without quantizing user colors.
+    values._count=(values._count or 0)+1
+    if values._count>512 then values={_count=1};tint_cache[role]=values end
+    values[weight]=result
+    return result
 end
 
 Engine.color = convert
 
 function Engine.foreground(role)
-    return Themes.foreground(Engine.accentToken(role)-TAG)
+    role=role or "primary"
+    local value=foreground_cache[role]
+    if value==nil then value=Themes.foreground(Engine.accentToken(role)-TAG);foreground_cache[role]=value end
+    return value
 end
 
 function Engine.theme(base)
@@ -217,6 +232,7 @@ function Engine.install()
         end
         if panel_ok then adapt(panel, proxy, "/features/panel/widget/button.lua", undo) end
         local Render = require("mooncolor_render")
+        assign(modules.box,"paintTo",require("mooncolor_surface").wrap(modules.box.paintTo,Engine,Theme,proxy))
         for _, mod in ipairs({ modules.box, modules.progress, require("ui.themes.widgets.modal") }) do
             assign(mod, "paintTo", Render.wrap(mod.paintTo))
         end
@@ -225,6 +241,7 @@ function Engine.install()
         require("mooncolor_decor").install(Engine, assign)
         require("mooncolor_nav").install(Engine, assign)
         require("mooncolor_panels").install(Engine,replaceLocal)
+        require("mooncolor_quickpanel").install(Engine,assign,replaceLocal)
         require("mooncolor_controls").install(Engine,assign,replaceLocal)
         require("mooncolor_perf").install(Engine,assign,replaceLocal)
         require("mooncolor_loading").install(Engine,assign)
@@ -273,7 +290,7 @@ function Engine.refresh(desktop, clean)
     end
     desktop._shell = nil -- Rebuild topbar and content geometry after nav height/theme changes.
     desktop:updateView()
-    require("ui/uimanager"):setDirty(desktop, clean and "full" or "ui")
+    if desktop.active~=false then require("ui/uimanager"):setDirty(desktop, clean and "full" or "ui") end
 end
 
 function Engine.set(key, value, desktop)
@@ -309,10 +326,12 @@ function Engine.setRole(id, value, desktop)
     local hex=Themes.hex(value)
     if not found then return false,"未知的颜色项目" end
     if not hex then return false,"请输入 #RRGGBB 或 #RGB 颜色" end
-    local custom=clone(Engine.config().custom_colors)
-    custom[id]=hex
     local flags={primary="buttons",icons="icons",headings="headings",navigation="tabs",progress="progress",
         stat1="statistics",stat2="statistics",stat3="statistics",borders="card_edges"}
+    local conf=Engine.config()
+    if conf.custom_colors[id]==hex and conf[flags[id]] then return true end
+    local custom=clone(conf.custom_colors)
+    custom[id]=hex
     return Engine.commit(function(saved)
         saved.custom_colors,saved.palette,saved.active_theme_name=custom,"custom",nil
         saved[flags[id]]=true

@@ -11,3 +11,5 @@ desktop.ini
 test-results.json
 __pycache__/
 *.zip
+
+pixel-test-results.json

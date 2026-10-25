@@ -60,16 +60,6 @@ function Ticket.install(Engine, assign)
             end
             -- Delimiters in user text cannot collide with length-prefixed fields.
             add(i)
-            -- Retain the original list for backwards-readable signatures.
-            parts[#parts + 1] = table.concat({
-                block.kind or "text", block.x or 0, block.y or 0,
-                block.width or 0, block.height or 0, block.size or 0,
-                block.bold and 1 or 0, block.align or "", block.radius or 0,
-                block.value or 0, block.shadow or 0, block.lighten or 0,
-                block.track or 0, block.scale_factor or 0,
-                block.keep and 1 or 0, block.alpha and 1 or 0,
-                block.text or "", block.file or "",
-            }, "\31")
         end
         return table.concat(parts, "\30")
     end

@@ -49,11 +49,14 @@ function Decor.install(Engine, assign)
     if ok then
         local paint = Heatmap.paintTo
         local levels = { [0xC8]=0.22, [0x98]=0.45, [0x58]=0.72, [0]=1 }
+        local lut,revision={},-1
         assign(Heatmap, "paintTo", function(self, bb, x, y)
             if not Engine.active() or not Engine.config().statistics then return paint(self, bb, x, y) end
             local canvas = Render.canvas(bb)
-            local lut={}
-            for shade,weight in pairs(levels)do lut[shade]=Engine.color(Engine.tint(weight,"stat1"))end
+            if revision~=Engine.revision then
+                lut={};revision=Engine.revision
+                for shade,weight in pairs(levels)do lut[shade]=Engine.color(Engine.tint(weight,"stat1"))end
+            end
             local view = setmetatable({ paintRect = function(_, px, py, w, h, c)
                 local gray = type(c)=="number" and c or (BB.isColor8 and BB.isColor8(c) and c.a)
                 if lut[gray] then c=lut[gray] end

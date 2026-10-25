@@ -10,7 +10,7 @@ from lupa.luajit21 import LuaRuntime
 lua = LuaRuntime(unpack_returned_tuples=True)
 moon = Path(os.environ.get('MOON_TEST_SOURCE', ROOT / 'work/moon')).as_posix()
 plugin = Path(os.environ.get('MOON_COLOR_TEST_PLUGIN', ROOT)).as_posix()
-TESTING_V21 = any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.1.0','2.2.0','2.3.0'])
+TESTING_V21 = any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.1.0','2.2.0','2.3.0','2.4.0'])
 lua.execute(f"package.path = '{moon}/tests/?.lua;{moon}/book.koplugin/?.lua;{moon}/book.koplugin/?/init.lua;{plugin}/?.lua;' .. package.path")
 BOOT = '''
 Kit = require("support.widget_stubs")
@@ -339,13 +339,33 @@ end)
 lua.execute((ROOT / 'tests/v2.lua').read_text(encoding='utf-8'))
 if TESTING_V21:
     lua.execute((ROOT / 'tests/v21.lua').read_text(encoding='utf-8'))
-    if any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.2.0','2.3.0']):
+    if any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.2.0','2.3.0','2.4.0']):
         lua.execute((ROOT / 'tests/v22.lua').read_text(encoding='utf-8'))
-    if '2.3.0' in Path(plugin, '_meta.lua').read_text(encoding='utf-8'):
+    if any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.3.0','2.4.0']):
         import hashlib
         lua.globals().python_sha256 = lambda text: hashlib.sha256(text.encode('utf-8')).hexdigest()
         lua.execute((ROOT / 'tests/v23.lua').read_text(encoding='utf-8'))
 results = [dict(item.items()) for item in lua.globals().results.values()]
+if Path(plugin, 'mooncolor_quickpanel.lua').exists():
+    vm = LuaRuntime(unpack_returned_tuples=True)
+    vm.execute(f"package.path = '{moon}/tests/?.lua;{moon}/book.koplugin/?.lua;{moon}/book.koplugin/?/init.lua;{plugin}/?.lua;' .. package.path")
+    fixture = '''
+    quick_snapshot={page=42,total_pages=200,percent=21,reading_chapter_idx=1,
+        identity={book={title="百年孤独",authors="马尔克斯"}},
+        ui={toc={toc={{title="第一章",page=1}}}}}
+    toc_reads=0
+    package.loaded["reader.session"]={current=function()return quick_snapshot end,
+        bookPages=function()return quick_snapshot.page,quick_snapshot.total_pages end,
+        chapterIndex=function()toc_reads=toc_reads+1;return 1 end,
+        chapterTitle=function()toc_reads=toc_reads+1;return "第一章" end,
+        toc=function()toc_reads=toc_reads+1;return {{title="第一章"}} end}
+    '''
+    vm.execute(BOOT.replace('Engine = require("mooncolor_engine")',fixture+'\nEngine = require("mooncolor_engine")'))
+    core = (Path(os.environ['KOREADER_TEST_SOURCE']) / 'frontend/ui/widget/touchmenu.lua').read_text(encoding='utf-8')
+    switch = core[core.index('function TouchMenu:switchMenuTab('):core.index('function TouchMenu:backToUpperMenu(')]
+    vm.globals().native_switch_source = switch
+    vm.execute((ROOT / 'tests/v24.lua').read_text(encoding='utf-8'))
+    results.extend(dict(item.items()) for item in vm.globals().results.values())
 for scenario in ['rollback-and-retry', 'missing-moon']:
     vm = LuaRuntime(unpack_returned_tuples=True)
     vm.execute(f"package.path = '{moon}/tests/?.lua;{moon}/book.koplugin/?.lua;{moon}/book.koplugin/?/init.lua;{plugin}/?.lua;' .. package.path")
