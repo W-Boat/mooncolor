@@ -10,7 +10,7 @@ from lupa.luajit21 import LuaRuntime
 lua = LuaRuntime(unpack_returned_tuples=True)
 moon = Path(os.environ.get('MOON_TEST_SOURCE', ROOT / 'work/moon')).as_posix()
 plugin = Path(os.environ.get('MOON_COLOR_TEST_PLUGIN', ROOT)).as_posix()
-TESTING_V21 = '2.1.0' in Path(plugin, '_meta.lua').read_text(encoding='utf-8')
+TESTING_V21 = any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.1.0','2.2.0'])
 lua.execute(f"package.path = '{moon}/tests/?.lua;{moon}/book.koplugin/?.lua;{moon}/book.koplugin/?/init.lua;{plugin}/?.lua;' .. package.path")
 BOOT = '''
 Kit = require("support.widget_stubs")
@@ -66,6 +66,11 @@ package.loaded["utils.paths"] = {}
 package.loaded["libs/libkoreader-lfs"] = {}
 package.loaded["ui.widgets.plain_cover"] = {}
 if PLUGIN_UNDER_TEST == "2.1" then
+    metadata_rows,metadata_reads={},0
+    package.loaded["book.store"]={identityFor=function(file)
+        metadata_reads=metadata_reads+1
+        return metadata_rows[file]
+    end}
     package.loaded["ui.themes.widgets.image.core"]=nil
     package.preload["ui.themes.widgets.image.core"]=nil
     package.loaded["ui.themes.widgets.image.download"] = {cached=function()end}
@@ -334,6 +339,8 @@ end)
 lua.execute((ROOT / 'tests/v2.lua').read_text(encoding='utf-8'))
 if TESTING_V21:
     lua.execute((ROOT / 'tests/v21.lua').read_text(encoding='utf-8'))
+    if '2.2.0' in Path(plugin, '_meta.lua').read_text(encoding='utf-8'):
+        lua.execute((ROOT / 'tests/v22.lua').read_text(encoding='utf-8'))
 results = [dict(item.items()) for item in lua.globals().results.values()]
 for scenario in ['rollback-and-retry', 'missing-moon']:
     vm = LuaRuntime(unpack_returned_tuples=True)

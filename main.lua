@@ -27,4 +27,20 @@ function MoonColor:addToMainMenu(items)
     }
 end
 
+function MoonColor:onSuspend()
+    local engine=package.loaded.mooncolor_engine
+    if engine and engine.suspend then engine.suspend()end
+end
+function MoonColor:onResume()
+    local engine=package.loaded.mooncolor_engine
+    if engine and engine.resume then engine.resume()end
+end
+function MoonColor:onReaderReady()
+    local loading=package.loaded.mooncolor_loading
+    if loading and loading.finish then loading.finish()end
+end
+function MoonColor:onCloseDocument()
+    self:onReaderReady()
+end
+
 return MoonColor

@@ -57,12 +57,12 @@ local function entries(desktop)
                 toggleRow(desktop, "card_edges", "彩色卡片边框", "为卡片和弹窗描边；默认关闭，保持页面简洁"),
                 toggleRow(desktop, "fast_panels", "快速面板", "关闭面板背景网纹和网纹引起的全刷，减轻顶栏、侧栏和弹窗开销"),
                 toggleRow(desktop, "fast_ticket", "快速票根", "票根内容没变时直接复用上一张图，不再整屏重画，切到票根页立即出图"),
-                toggleRow(desktop, "fast_covers", "快速封面", "8ms 解码批次、15ms 让出输入，位图缓存上限 16MiB"),
+                toggleRow(desktop, "fast_covers", "封面缓存增强（可选）", "默认关闭；仅把缓存上限改为 12MiB，始终保留月读原生解码调度"),
                 toggleRow(desktop, "fast_home", "快速首页", "短时复用统计查询，统计变化或回到首页时失效"),
                 toggleRow(desktop, "inputs", "彩色输入框", "焦点描边与非焦点描边使用按钮色"),
                 toggleRow(desktop, "dividers", "彩色分割线", "分割线使用边框色；不改变阅读正文"),
                 toggleRow(desktop, "sidebar", "彩色侧栏内容", "目录、信息、统计及侧栏分隔"),
-                toggleRow(desktop, "loading_screen", "全屏开书进度", "复用月读组件；排版进度来自 KOReader，最多每半秒刷新"),
+                toggleRow(desktop, "loading_screen", "全屏开书进度", "显示月读书名、作者与本地封面；进度至少间隔 1 秒且变化 5% 才刷新"),
                 toggleRow(desktop, "quality_refresh", "强制彩色全刷", "默认关闭；开启会增加闪屏和等待，出现残影时可手动清屏", "refresh"),
             }
             local function action(title, subtitle, callback)

@@ -102,17 +102,19 @@ check("real-cover-queue-yields-input-reuses-cache-and-invalidates",function()
         return {stride=400,h=140}
     end}
     local boxes={}
-    for i=1,3 do boxes[i]=Core.widget{src="/cover"..i..".png",width=100,height=140}end
+    local modern=Engine.VERSION=="2.2.0"
+    local total=modern and 10 or 3
+    for i=1,total do boxes[i]=Core.widget{src="/cover"..i..".png",width=100,height=140}end
     assert(decoded==0 and #jobs==1)
     table.remove(jobs,1).fn()
-    assert(decoded==1 and #jobs==1 and jobs[1].delay==.015)
+    assert(decoded==(modern and 5 or 1) and #jobs==1 and jobs[1].delay==(modern and .1 or .015))
     while jobs[1]do table.remove(jobs,1).fn()end
-    assert(decoded==3)
+    assert(decoded==total)
     Core.widget{src="/cover1.png",width=100,height=140}
-    assert(decoded==3 and #jobs==0)
+    assert(decoded==total and #jobs==0)
     Core.invalidate("/cover1.png")
     Core.widget{src="/cover1.png",width=100,height=140}
-    assert(#jobs==1);table.remove(jobs,1).fn();assert(decoded==4)
+    assert(#jobs==1);table.remove(jobs,1).fn();assert(decoded==total+1)
     UI.nextTick,UI.scheduleIn=nextTick,schedule
     lfs.attributes=attr;package.loaded["ui/renderimage"]=oldRender
 end)
@@ -153,12 +155,20 @@ check("cover-queue-knobs-and-toggle-restoration",function()
         end
     end
     for _,fn in pairs(Core)do if type(fn)=="function"then visit(fn)end end
-    assert(values.BUDGET_MS==8 and values.YIELD_S==.015 and values.BITMAP_BUDGET==16*1024*1024)
+    if Engine.VERSION=="2.2.0"then
+        assert(values.BUDGET_MS==50 and values.YIELD_S==.1 and values.BITMAP_BUDGET==6*1024*1024)
+        Engine.set("fast_covers",true)
+        values,seen={},{}
+        for _,fn in pairs(Core)do if type(fn)=="function"then visit(fn)end end
+        assert(values.BUDGET_MS==50 and values.YIELD_S==.1 and values.BITMAP_BUDGET==12*1024*1024)
+    else
+        assert(values.BUDGET_MS==8 and values.YIELD_S==.015 and values.BITMAP_BUDGET==16*1024*1024)
+    end
     Engine.set("fast_covers",false)
     values,seen={},{}
     for _,fn in pairs(Core)do if type(fn)=="function"then visit(fn)end end
     assert(values.BUDGET_MS==50 and values.YIELD_S==.1 and values.BITMAP_BUDGET==6*1024*1024)
-    Engine.set("fast_covers",true)
+    Engine.set("fast_covers",Engine.VERSION~="2.2.0")
 end)
 check("opening-notice-replacement-restores-constructor-on-error",function()
     local Reader=require("apps/reader/readerui")

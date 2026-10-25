@@ -1,12 +1,12 @@
 -- Moon Color, GPL-3.0-or-later. Moon-only color token adapter.
-local Engine = { ID = "ext.mooncolor", VERSION = "2.1.0", installed = false, revision = 0 }
+local Engine = { ID = "ext.mooncolor", VERSION = "2.2.0", installed = false, revision = 0, suspended = false }
 local Themes = require("mooncolor_themes")
 local TAG = 0x1000000
 Engine.palettes, Engine.roles = Themes.presets, Themes.roles
 local defaults = { enabled = true, palette = "ocean", buttons = true,
     tabs = true, progress = true, card_edges = false, quality_refresh = false,
     icons = true, headings = true, statistics = true, navbar_style = "pill", navbar_labels = true, fast_panels = true, fast_ticket = true,
-    inputs = true, dividers = true, sidebar = true, fast_covers = true, fast_home = true, loading_screen = true }
+    inputs = true, dividers = true, sidebar = true, fast_covers = false, fast_home = true, loading_screen = true }
 local fallback, colors = {}, {}
 local cache = setmetatable({}, { __mode = "k" })
 local Settings, Device, BB
@@ -22,8 +22,8 @@ function Engine.config()
     if config_cache then return config_cache end
     local saved = Settings.getSource(Engine.ID)
     -- Once when upgrading: stop the previous version's forced quality refresh.
-    if saved.performance_schema ~= 2 then
-        saved.quality_refresh, saved.performance_schema = false, 2
+    if saved.performance_schema ~= 3 then
+        saved.quality_refresh, saved.fast_covers, saved.performance_schema = false, false, 3
         Settings.saveSource(Engine.ID)
     end
     local out = {}
@@ -40,7 +40,7 @@ function Engine.config()
 end
 
 function Engine.active()
-    if not Engine.installed or not Engine.config().enabled then return false end
+    if Engine.suspended or not Engine.installed or not Engine.config().enabled then return false end
     if not Device.hasColorScreen or not Device:hasColorScreen() then return false end
     if Device.screen.night_mode then return false end
     return Device.screen.isColorEnabled and Device.screen:isColorEnabled() == true
@@ -228,6 +228,7 @@ function Engine.install()
         require("mooncolor_controls").install(Engine,assign,replaceLocal)
         require("mooncolor_perf").install(Engine,assign,replaceLocal)
         require("mooncolor_loading").install(Engine,assign)
+        require("mooncolor_power").install(Engine)
         local UIManager = require("ui/uimanager")
         local dirty, close = UIManager.setDirty, UIManager.close
         assign(UIManager, "setDirty", function(self, widget, mode, region, dither)
@@ -264,7 +265,7 @@ function Engine.install()
 end
 
 function Engine.refresh(desktop, clean)
-    if not desktop or desktop.closed then return end
+    if Engine.suspended or not desktop or desktop.closed then return end
     local overlay = desktop.settings_overlay
     while overlay do
         overlay.theme = require("ui.themes").current()

@@ -6,7 +6,9 @@ function Perf.install(Engine,assign,replaceLocal)
     Engine.coverage.cover_queue=false
     if ok then
         local knobs,seen={},{}
-        local wanted={BUDGET_MS={fast=8},YIELD_S={fast=.015},BITMAP_BUDGET={fast=16*1024*1024}}
+        -- Keep upstream batching and input scheduling intact. Very short batches
+        -- caused many more cover replacements and e-ink refreshes on hardware.
+        local wanted={BITMAP_BUDGET={fast=12*1024*1024}}
         local function visit(fn)
             if seen[fn]then return end;seen[fn]=true
             local info=debug.getinfo(fn,"S")
@@ -18,7 +20,7 @@ function Perf.install(Engine,assign,replaceLocal)
             end
         end
         for _,fn in pairs(Core)do if type(fn)=="function"then visit(fn)end end
-        if knobs.BUDGET_MS and knobs.YIELD_S and knobs.BITMAP_BUDGET then
+        if knobs.BITMAP_BUDGET then
             local initialized=false
             local function tune()
                 local fast=Engine.config().enabled and Engine.config().fast_covers
@@ -34,6 +36,7 @@ function Perf.install(Engine,assign,replaceLocal)
             local reload=Engine.reload
             assign(Engine,"reload",function(...)reload(...);tune()end)
             Engine.coverage.cover_queue=true
+            Engine.coverage.native_cover_schedule=true
         end
     end
     -- Cache statistics data, not widget trees. No ownership/lifecycle changes.

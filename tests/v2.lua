@@ -57,10 +57,10 @@ check("mixed-ring-three-colors-and-bitmap-cache-invalidation",function()
     for _,role in ipairs{"stat1","stat2","stat3"}do
         local c=Engine.accent(role);assert(colors[c.r..","..c.g..","..c.b],role)
     end
-    widget.rings[2].fraction=.5;widget:paintTo(bb,0,0);assert(images==2 and frees==(Engine.VERSION=="2.1.0"and 0 or 1))
+    widget.rings[2].fraction=.5;widget:paintTo(bb,0,0);assert(images==2 and frees==(Engine.VERSION~="2.0.0"and 0 or 1))
     Engine.set("palette","garden");widget:paintTo(bb,0,0);assert(images==3 and frees==2)
     widget:free()
-    if Engine.VERSION=="2.1.0"then
+    if Engine.VERSION~="2.0.0"then
         local other=Ring:new{size=96,rings={{fraction=1},{fraction=.5},{fraction=1}}}
         other:paintTo(bb,0,0);assert(images==3)
         other:free()
@@ -157,7 +157,7 @@ check("editor-uses-real-input-string-callback-contract",function()
     end
     Editor.colors(Engine)
     assert(#editor_shown.items==9)
-    if Engine.VERSION=="2.1.0"then
+    if Engine.VERSION~="2.0.0"then
         local Swatch=require("mooncolor_swatch")
         local make=Swatch.new
         Swatch.new=function(_,_,_,_,precise)return {show=function()precise()end}end
