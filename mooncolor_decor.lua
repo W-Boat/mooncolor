@@ -105,6 +105,7 @@ function Decor.install(Engine, assign)
         end)
     end
     require("mooncolor_home").install(Engine,assign)
+    require("mooncolor_ticket").install(Engine,assign)
 end
 
 return Decor

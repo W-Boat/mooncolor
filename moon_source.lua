@@ -56,6 +56,7 @@ local function entries(desktop)
                 end,
                 toggleRow(desktop, "card_edges", "彩色卡片边框", "为卡片和弹窗描边；默认关闭，保持页面简洁"),
                 toggleRow(desktop, "fast_panels", "快速面板", "关闭面板背景网纹和网纹引起的全刷，减轻顶栏、侧栏和弹窗开销"),
+                toggleRow(desktop, "fast_ticket", "快速票根", "票根内容没变时直接复用上一张图，不再整屏重画，切到票根页立即出图"),
                 toggleRow(desktop, "quality_refresh", "强制彩色全刷", "默认关闭；开启会增加闪屏和等待，出现残影时可手动清屏", "refresh"),
             }
             local function action(title, subtitle, callback)

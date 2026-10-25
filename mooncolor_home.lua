@@ -97,5 +97,32 @@ function Home.install(Engine,assign)
         if c and c.image then c.image:free();self._moon_color_ring=nil end
         if free then return free(self,...)end
     end)
+
+    -- 首页底部翻页圆点：主题里当前页是黑点、其余是灰点，这里换成强调色。
+    -- 结构固定为 [上一页按钮, CenterContainer[圆点行], 下一页按钮]，只在 dots 模式（首页）生效。
+    local pager_ok,Pager=pcall(require,"ui.themes.widgets.pager")
+    Engine.coverage.pager=pager_ok and type(Pager.widget)=="function"
+    if Engine.coverage.pager then
+        local widget=Pager.widget
+        assign(Pager,"widget",function(opts)
+            local pager=widget(opts)
+            if type(opts)~="table" or not opts.dots or opts.center then return pager end
+            if not Engine.active() or not Engine.config().tabs then return pager end
+            local row=pager[2] and pager[2][1]
+            if type(row)~="table" then return pager end
+            local ink=Theme.current().color.ink
+            local active,idle=Engine.accentToken("navigation"),Engine.tint(0.32,"navigation")
+            for i=1,#row do
+                local dot=row[i]
+                local style=type(dot)=="table" and dot.style
+                -- 圆点是边长相同的 Box；两侧的 HorizontalSpan 只有宽度，跳过。
+                -- 主题色是数字（不是 BB 颜色对象），直接比数字；用真值判断避免和 nil 比较。
+                if type(style)=="table" and style.bg and dot.width==dot.height then
+                    style.bg=style.bg==ink and active or idle
+                end
+            end
+            return pager
+        end)
+    end
 end
 return Home

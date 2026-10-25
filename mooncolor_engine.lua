@@ -5,7 +5,7 @@ local TAG = 0x1000000
 Engine.palettes, Engine.roles = Themes.presets, Themes.roles
 local defaults = { enabled = true, palette = "ocean", buttons = true,
     tabs = true, progress = true, card_edges = false, quality_refresh = false,
-    icons = true, headings = true, statistics = true, navbar_style = "pill", navbar_labels = true, fast_panels = true }
+    icons = true, headings = true, statistics = true, navbar_style = "pill", navbar_labels = true, fast_panels = true, fast_ticket = true }
 local fallback, colors = {}, {}
 local cache = setmetatable({}, { __mode = "k" })
 local Settings, Device, BB
