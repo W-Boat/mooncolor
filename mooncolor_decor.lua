@@ -6,9 +6,30 @@ function Decor.install(Engine, assign)
     local Icon = require("ui.themes.widgets.icon")
     local Text = require("ui.themes.widgets.text")
     local icon, line = Icon.widget, Text.line
+    -- Colours are cdata created through ffi.metatype, and their __eq metamethod
+    -- dereferences the other operand (ffi/blitbuffer.lua:
+    -- ColorRGB32_mt:__eq -> color:getColorRGB32()). LuaJIT calls that __eq even
+    -- for `color == nil`, so comparing a colour against nil or a number raises
+    -- "attempt to index local 'color' (a nil value)". Compare types first, and
+    -- use plain truthiness to test whether a colour is set.
+    local function sameColor(a, b)
+        if type(a) ~= type(b) then return false end
+        return a == b
+    end
+    -- Unset colour, or the generic black that means "let the accent show".
+    local function isBlack(color)
+        if not color then return true end
+        if type(color) == "number" then return color == 0 end
+        return sameColor(color, BB.COLOR_BLACK)
+    end
+    -- Only nil / numeric black mean "the caller did not pick a colour".
+    local function isUnstyled(color)
+        if not color then return true end
+        return type(color) == "number" and color == 0
+    end
     assign(Icon, "widget", function(opts)
         if Engine.active() and Engine.config().icons and not opts._moon_preserve_color
-            and (not opts.color or opts.color == BB.COLOR_BLACK) then
+            and isBlack(opts.color) then
             local copy = {}; for k,v in pairs(opts) do copy[k]=v end
             copy.color = Engine.accent("icons")
             return icon(copy)
@@ -18,7 +39,7 @@ function Decor.install(Engine, assign)
     assign(Text, "line", function(role, text, opts)
         local widget = line(role, text, opts)
         if Engine.active() and Engine.config().headings and (role == "title" or role == "hero")
-            and (not opts or opts.color == nil or opts.color == 0) then widget.fgcolor = Engine.accent("headings") end
+            and (not opts or isUnstyled(opts.color)) then widget.fgcolor = Engine.accent("headings") end
         return widget
     end)
 
@@ -55,7 +76,7 @@ function Decor.install(Engine, assign)
             local widget = bars(opts)
             if Engine.active() and Engine.config().statistics then
                 local function walk(w)
-                    if getmetatable(w)==Line and w.background == BB.COLOR_BLACK then w.background = Engine.accent("stat1") end
+                    if getmetatable(w)==Line and sameColor(w.background, BB.COLOR_BLACK) then w.background = Engine.accent("stat1") end
                     for _, child in ipairs(w) do if type(child)=="table" then walk(child) end end
                 end
                 walk(widget)
@@ -75,7 +96,7 @@ function Decor.install(Engine, assign)
                 widget.style.bg = Engine.accentToken("progress")
                 local fg=BB.Color8(Engine.foreground("progress"))
                 local function textColor(w)
-                    if w.fgcolor~=nil then w.fgcolor=fg end
+                    if w.fgcolor then w.fgcolor=fg end
                     for _,child in ipairs(w)do if type(child)=="table"then textColor(child)end end
                 end
                 textColor(widget)

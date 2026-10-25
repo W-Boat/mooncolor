@@ -43,6 +43,19 @@ PC 同一绘图测试中，500 次热力图绘制的 getSource 调用由 351000 
 
 开发预览 http://127.0.0.1:8765 使用 Lua 绘图记录生成 SVG，非完整 KOReader 模拟器；不模拟彩墨色域、刷新波形或残影。尚未连接 Kobo 实机，未进行实机速度、耗电或校色验证，不能保证消除所有设备卡顿。
 
+## 修复记录
+
+### 未发布
+
+- 修复书架封面进度角标重着色时的崩溃（月读 0.2.43 / KOReader 2026.07.2，Kobo Monza）：
+  `mooncolor_decor.lua` 的 `textColor()` 用 `w.fgcolor ~= nil` 判断控件是否已着色。
+  KOReader 的颜色是用 `ffi.metatype` 注册的 cdata，其 `__eq` 元方法会解引用另一个操作数
+  （`ffi/blitbuffer.lua` 的 `ColorRGB32_mt:__eq` → `color:getColorRGB32()`），而 LuaJIT 在
+  `color == nil`、`color == 数字` 这类比较里同样会调用该元方法，于是抛出
+  `attempt to index local 'color' (a nil value)`。现在改为先用 `type()` 判断类型，
+  用真值判断“是否已着色”，并用 `sameColor()` 比较两个颜色，不再把颜色和 nil / 数字直接比较。
+  同一文件里图标、标题与统计柱形三处同样的写法已一并修正。
+
 ## 配置与移除
 
 配置与主题保存在月读数据目录 settings/ext.mooncolor.lua。覆盖升级保留配置。关闭总开关后重开窗口，或移除 mooncolor.koplugin 并重启 KOReader，即可恢复原有界面。
