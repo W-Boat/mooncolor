@@ -35,9 +35,32 @@ function Ticket.install(Engine, assign)
     ---@return string|nil
     local function signature(background, blocks, fill)
         if background ~= nil then return nil end
-        local parts = { tostring(fill) }
+        local screen=require("device").screen
+        local parts = { tostring(fill),tostring(screen:getWidth()),tostring(screen:getHeight()),tostring(Engine.revision) }
+        local function add(v)
+            local text=tostring(v)
+            parts[#parts+1]=#text..":"..text
+        end
         for i = 1, #blocks do
             local block = blocks[i]
+            local keys={}
+            for key in pairs(block)do if key~="widget"then keys[#keys+1]=key end end
+            table.sort(keys)
+            for _,key in ipairs(keys)do
+                local value=block[key]
+                if type(value)=="table"or type(value)=="function"then return nil end
+                add(key);add(value)
+            end
+            if block.file then local size,mtime=stat(block.file);add(size);add(mtime)end
+            if block.widget then
+                local w=block.widget
+                -- Only plain fallback covers have a stable, known description.
+                if type(w.title)~="string"then return nil end
+                add(w.title);add(w.author);add(w.width);add(w.height)
+            end
+            -- Delimiters in user text cannot collide with length-prefixed fields.
+            add(i)
+            -- Retain the original list for backwards-readable signatures.
             parts[#parts + 1] = table.concat({
                 block.kind or "text", block.x or 0, block.y or 0,
                 block.width or 0, block.height or 0, block.size or 0,

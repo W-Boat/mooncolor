@@ -1,11 +1,12 @@
 -- Moon Color, GPL-3.0-or-later. Moon-only color token adapter.
-local Engine = { ID = "ext.mooncolor", VERSION = "2.0.0", installed = false, revision = 0 }
+local Engine = { ID = "ext.mooncolor", VERSION = "2.1.0", installed = false, revision = 0 }
 local Themes = require("mooncolor_themes")
 local TAG = 0x1000000
 Engine.palettes, Engine.roles = Themes.presets, Themes.roles
 local defaults = { enabled = true, palette = "ocean", buttons = true,
     tabs = true, progress = true, card_edges = false, quality_refresh = false,
-    icons = true, headings = true, statistics = true, navbar_style = "pill", navbar_labels = true, fast_panels = true, fast_ticket = true }
+    icons = true, headings = true, statistics = true, navbar_style = "pill", navbar_labels = true, fast_panels = true, fast_ticket = true,
+    inputs = true, dividers = true, sidebar = true, fast_covers = true, fast_home = true, loading_screen = true }
 local fallback, colors = {}, {}
 local cache = setmetatable({}, { __mode = "k" })
 local Settings, Device, BB
@@ -68,6 +69,8 @@ local function token(rgb, gray)
     fallback[value] = gray
     return value
 end
+Engine.rgbToken=function(rgb)return token(rgb,0x88)end
+Engine.foregroundRGB=Themes.foreground
 
 -- Private proxy, installed into Moon module-local upvalues only.
 -- Neither the global BB.Color8 constructor nor KOReader widgets are changed.
@@ -222,6 +225,9 @@ function Engine.install()
         require("mooncolor_decor").install(Engine, assign)
         require("mooncolor_nav").install(Engine, assign)
         require("mooncolor_panels").install(Engine,replaceLocal)
+        require("mooncolor_controls").install(Engine,assign,replaceLocal)
+        require("mooncolor_perf").install(Engine,assign,replaceLocal)
+        require("mooncolor_loading").install(Engine,assign)
         local UIManager = require("ui/uimanager")
         local dirty, close = UIManager.setDirty, UIManager.close
         assign(UIManager, "setDirty", function(self, widget, mode, region, dither)
@@ -312,7 +318,7 @@ function Engine.setRole(id, value, desktop)
     end,desktop,true)
 end
 
-local theme_keys={"buttons","tabs","progress","icons","headings","statistics","card_edges","navbar_style","navbar_labels"}
+local theme_keys={"buttons","tabs","progress","icons","headings","statistics","card_edges","navbar_style","navbar_labels","inputs","dividers","sidebar"}
 function Engine.listThemes()
     local raw=Settings.getSource(Engine.ID).saved_themes
     local out={}

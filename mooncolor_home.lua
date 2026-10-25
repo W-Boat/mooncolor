@@ -36,6 +36,16 @@ function Home.install(Engine,assign)
     Engine.coverage.rings=ok
     if not ok then return end
     local paint,free=Ring.paintTo,Ring.free
+    local shared,order,bytes,shared_revision={},{},0,-1
+    local function release(c)
+        c.refs=c.refs-1
+        if c.refs==0 and not c.cached then c.image:free()end
+    end
+    local function evict()
+        local key=table.remove(order,1)
+        local c=shared[key];shared[key]=nil;bytes=bytes-c.bytes;c.cached=false
+        if c.refs==0 then c.image:free()end
+    end
     local tables,lut_revision={},-1
     local function lut(role)
         if lut_revision~=Engine.revision then tables={};lut_revision=Engine.revision end
@@ -69,22 +79,39 @@ function Home.install(Engine,assign)
     end
     assign(Ring,"paintTo",function(self,bb,x,y)
         if not Engine.active()or not Engine.config().statistics then return paint(self,bb,x,y)end
+        if shared_revision~=Engine.revision then
+            while #order>0 do evict()end
+            shared_revision=Engine.revision
+        end
         local c=self._moon_color_ring
         local theme_id=Theme.id()
         local hit=c and c.theme_id==theme_id and c.size==self.size and c.thickness==self.thickness and c.revision==Engine.revision and #c.fractions==#self.rings
         if hit then for i,ring in ipairs(self.rings)do if c.fractions[i]~=(ring.fraction or 0)then hit=false;break end end end
         if not hit then
-            if c and c.image then c.image:free()end
+            if c and c.image then release(c)end
             self._moon_color_ring=nil
             if BB.new and BB.TYPE_BBRGB32 and bb.alphablitFrom and self.size<=512 then
+                local parts={theme_id,self.size,self.thickness or 0}
+                for _,ring in ipairs(self.rings)do parts[#parts+1]=ring.fraction or 0 end
+                local key=table.concat(parts,":")
+                c=shared[key]
+                if c then
+                    c.refs=c.refs+1;self._moon_color_ring=c;hit=true
+                    for i,k in ipairs(order)do if k==key then table.remove(order,i);break end end
+                    order[#order+1]=key
+                else
                 local good,image=pcall(BB.new,self.size,self.size,BB.TYPE_BBRGB32)
                 if good then
                     image:paintRectRGB32(0,0,self.size,self.size,BB.ColorRGB32(255,255,255,0))
                     draw(self,image,0,0)
-                    c={image=image,size=self.size,thickness=self.thickness,revision=Engine.revision,theme_id=theme_id,fractions={}}
+                    c={image=image,size=self.size,thickness=self.thickness,revision=Engine.revision,theme_id=theme_id,fractions={},
+                        refs=1,cached=true,bytes=self.size*self.size*4}
                     for i,ring in ipairs(self.rings)do c.fractions[i]=ring.fraction or 0 end
                     self._moon_color_ring=c
                     hit=true
+                    shared[key]=c;order[#order+1]=key;bytes=bytes+c.bytes
+                    while #order>8 or bytes>4*1024*1024 do evict()end
+                end
                 end
             end
         end
@@ -94,7 +121,7 @@ function Home.install(Engine,assign)
     end)
     assign(Ring,"free",function(self,...)
         local c=self._moon_color_ring
-        if c and c.image then c.image:free();self._moon_color_ring=nil end
+        if c and c.image then release(c);self._moon_color_ring=nil end
         if free then return free(self,...)end
     end)
 

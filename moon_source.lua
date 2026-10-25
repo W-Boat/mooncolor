@@ -23,7 +23,7 @@ local function entries(desktop)
     end
     return { {
         group = "desktop", order = 310, id = "appearance", icon = "palette",
-        title = "彩墨界面", subtitle = "给月读的按钮、选中标签和进度条加入彩色强调",
+        title = "彩墨界面 · "..Engine.VERSION, subtitle = "控件配色、性能与主题",
         page = { title = "Moon Color · 彩墨界面", sections = function()
             local rows = {
                 toggleRow(desktop, "enabled", "启用彩墨配色", Engine.status()),
@@ -57,6 +57,12 @@ local function entries(desktop)
                 toggleRow(desktop, "card_edges", "彩色卡片边框", "为卡片和弹窗描边；默认关闭，保持页面简洁"),
                 toggleRow(desktop, "fast_panels", "快速面板", "关闭面板背景网纹和网纹引起的全刷，减轻顶栏、侧栏和弹窗开销"),
                 toggleRow(desktop, "fast_ticket", "快速票根", "票根内容没变时直接复用上一张图，不再整屏重画，切到票根页立即出图"),
+                toggleRow(desktop, "fast_covers", "快速封面", "8ms 解码批次、15ms 让出输入，位图缓存上限 16MiB"),
+                toggleRow(desktop, "fast_home", "快速首页", "短时复用统计查询，统计变化或回到首页时失效"),
+                toggleRow(desktop, "inputs", "彩色输入框", "焦点描边与非焦点描边使用按钮色"),
+                toggleRow(desktop, "dividers", "彩色分割线", "分割线使用边框色；不改变阅读正文"),
+                toggleRow(desktop, "sidebar", "彩色侧栏内容", "目录、信息、统计及侧栏分隔"),
+                toggleRow(desktop, "loading_screen", "全屏开书进度", "复用月读组件；排版进度来自 KOReader，最多每半秒刷新"),
                 toggleRow(desktop, "quality_refresh", "强制彩色全刷", "默认关闭；开启会增加闪屏和等待，出现残影时可手动清屏", "refresh"),
             }
             local function action(title, subtitle, callback)
@@ -74,13 +80,20 @@ local function entries(desktop)
                 action("手动清除残影", "仅这一次全屏刷新", function()
                     require("ui/uimanager"):setDirty(desktop or "all", "full")
                 end),
+            } }, { title="版本与更新",rows={
+                action("Moon Color "..Engine.VERSION,"W-Boat/mooncolor · 当前版本",function()
+                    require("ui.themes.widgets.qr"):new{title="Moon Color "..Engine.VERSION,
+                        text="https://github.com/W-Boat/mooncolor",caption="项目主页"}:show()
+                end),
+                action("检查更新","复用月读异步网络请求，不在启动或绘制时联网",
+                    function()require("mooncolor_update").check()end),
             } } }
         end },
     } }
 end
 
 return {
-    api = 1, id = Engine.ID,
+    api = 1, id = Engine.ID, version=Engine.VERSION,
     provides = { source = false, features = {
         setting = { entries = entries },
         panel = { actions = function()

@@ -19,6 +19,7 @@ function Editor.colors(engine, desktop)
         local id, name = role.id, role.name
         items[#items + 1] = { text = name .. "  " .. engine.config().custom_colors[id],
             callback = function()
+                local function precise()
                 require("ui.themes.widgets.input"):new{
                     title = "自定义颜色 · " .. name,
                     fields = {{ text = engine.config().custom_colors[id],
@@ -28,6 +29,12 @@ function Editor.colors(engine, desktop)
                         if not ok then notice(err) end
                     end,
                 }:show()
+                end
+                require("mooncolor_swatch").new(engine,name,engine.config().custom_colors[id],
+                    function(value)
+                        local ok,err=engine.setRole(id,value,desktop)
+                        if not ok then notice(err)end
+                    end,precise):show()
             end }
     end
     require("ui.themes.widgets.list"):new{ title = "按部位自定义颜色", items = items }:show()

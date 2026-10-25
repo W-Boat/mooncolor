@@ -6,6 +6,19 @@ Themes.roles = {
     {id="stat1", name="统计主色 / 外环"}, {id="stat2", name="统计第二色 / 中环"},
     {id="stat3", name="统计第三色 / 内环"}, {id="borders", name="卡片与弹窗边框"},
 }
+local function mixed(id,name,a,b,c)
+    return {id=id,name=name,rgb=tonumber(a:sub(2),16),colors={
+        primary=a,icons=b,headings=c,navigation=a,progress=b,
+        stat1=a,stat2=b,stat3=c,borders=b}}
+end
+local additional={
+    mixed("nord","北境 · 蓝青灰","#285D88","#16685C","#52677C"),
+    mixed("sakura","樱花 · 玫粉紫","#A34454","#66509A","#875D44"),
+    mixed("bamboo","竹影 · 绿金青","#246648","#865E20","#16685C"),
+    mixed("lavender","薰衣草 · 紫蓝绿","#66509A","#205CA8","#34785D"),
+    mixed("amber","琥珀 · 金蓝红","#865E20","#285D88","#A34434"),
+    mixed("berry","浆果 · 红紫蓝","#A34434","#8A4C8F","#285D88"),
+}
 local function mono(hex)
     local out={};for _,role in ipairs(Themes.roles)do out[role.id]=hex end;return out
 end
@@ -20,6 +33,7 @@ Themes.presets = {
     {id="sunset",name="日落 · 红蓝金",rgb=0xA34434,colors={primary="#A34434",icons="#285D88",headings="#865E20",
         navigation="#A34434",progress="#285D88",stat1="#A34434",stat2="#285D88",stat3="#865E20",borders="#795C54"}},
 }
+for _,preset in ipairs(additional)do Themes.presets[#Themes.presets+1]=preset end
 function Themes.hex(value)
     if type(value)~="string" then return nil end
     value=value:match("^%s*(.-)%s*$"):gsub("^#","")
