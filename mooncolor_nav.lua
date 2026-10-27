@@ -15,10 +15,33 @@ function Nav.install(Engine,assign)
     local GestureRange=require("ui/gesturerange")
     local color=Theme.color or require("ffi/blitbuffer").Color8
     local height,widget=Tabbar.height,Tabbar.widget
+    local context="navbar"
+    local function options()
+        local c=Engine.config()
+        return c[context.."_labels"],c[context.."_style"],c[context.."_compact"]
+    end
+    -- Scope only the public sidebar render call. Never load the sidebar eagerly,
+    -- inspect private upvalues or let its dimensions affect the desktop.
+    local wrapped=setmetatable({},{__mode="k"})
+    Engine.attachSidebar=function()
+        local sidebar=package.loaded["features.sidebar"]
+        if type(sidebar)~="table"or type(sidebar.render)~="function"or wrapped[sidebar]then return end
+        local render=sidebar.render
+        assign(sidebar,"render",function(self,...)
+            if not Engine.config().enabled then return render(self,...)end
+            local previous=context;context="sidebar"
+            local result={pcall(render,self,...)};context=previous
+            if not result[1]then error(result[2],0)end
+            return unpack(result,2)
+        end)
+        wrapped[sidebar]=true
+    end
+    Engine.attachSidebar()
     assert(type(height)=="function"and type(widget)=="function","月读底栏接口不兼容")
     assign(Tabbar,"height",function()
         if not Engine.installed or not Engine.config().enabled then return height()end
-        return Theme.px(Engine.config().navbar_labels and 64 or 48)
+        local labels,_,compact=options()
+        return Theme.px(labels and(compact and 56 or 64)or(compact and 40 or 48))
     end)
     assign(Tabbar,"widget",function(opts)
         if not Engine.installed or not Engine.config().enabled then return widget(opts)end
@@ -27,7 +50,8 @@ function Nav.install(Engine,assign)
         local rule=math.max(1,Theme.px(t.row.divider))
         local cell_h=math.max(1,h-rule)
         local row=HG:new{align="top"}
-        local labels=conf.navbar_labels and opts.show_labels~=false
+        local show_labels,style,compact=options()
+        local labels=show_labels and opts.show_labels~=false
         local accent=t.color.navigation or t.color.ink
         local fill=Theme.mix and Theme.mix(t.color.page,accent,.16)or 0xEE
         for i,tab in ipairs(opts.tabs)do
@@ -37,19 +61,19 @@ function Nav.install(Engine,assign)
             local badge_w=math.max(1,math.min(Theme.px(64),width-Theme.px(8)))
             local badge_h=math.min(Theme.px(32),cell_h)
             local ink=active and accent or(opts.plain and t.color.ink or t.color.faint)
-            local pill=active and conf.navbar_style=="pill"
+            local pill=active and style=="pill"
             local stack=VG:new{align="center",Box:new{
                 style={bg=pill and fill or nil,border=pill and 1 or 0,
                     border_color=accent,radius=pill and 999 or 0},
                 width=badge_w,height=badge_h,
-                Icon.widget{name=current.icon,size=math.min(t.control.icon+2,28),color=color(ink)},
+                Icon.widget{name=current.icon,size=math.min(t.control.icon+(compact and 0 or 2),28),color=color(ink)},
             }}
             if labels then
                 stack[#stack+1]=Span:new{width=Theme.px(3)}
                 stack[#stack+1]=Text.line("caption",current.text,{
                     width=math.max(1,width-Theme.px(6)),bold=active,color=ink})
             end
-            if active and conf.navbar_style=="line"then
+            if active and style=="line"then
                 stack[#stack+1]=Span:new{width=Theme.px(3)}
                 stack[#stack+1]=Box:new{style={bg=accent},keep_bg=true,
                     width=math.min(badge_w,Theme.px(28)),height=Theme.px(3)}

@@ -56,7 +56,7 @@ function Update.parse(body)
             return nil,"更新包地址、大小或 SHA-256 无效"
         end
     end
-    return nil,"新版本缺少 Moon Color 安装包"
+    return nil,"新版本缺少 moonflow 安装包"
 end
 function Update.autoEnabled()return settings().auto_update_check~=false end
 function Update.autoDownload()return settings().auto_update_download~=false end
@@ -129,7 +129,7 @@ function Update.offer(r,downloaded,manual)
     local dialog
     dialog=require("ui.themes.widgets.text_viewer"):new{
         title=downloaded and"更新已下载"or"发现新版本",
-        text="Moon Color "..version().." → "..r.version.."\n\n"
+        text="moonflow "..version().." → "..r.version.."\n\n"
             ..(downloaded and"安装包已下载。安装前会再次校验 SHA-256，完成后重启 KOReader。\n\n"or"下载后仍需确认安装。\n\n")
             ..(r.notes or""),
         buttons={
@@ -149,7 +149,7 @@ function Update.check(callback,automatic)
     settings().update_last_attempt_at=os.time();save()
     if not automatic then
         operation.dialog=require("ui.themes.widgets.progress_dialog"):new{
-            title="检查更新",text="正在检查 Moon Color 更新…",dismissable=false,on_cancel=Update.cancel}
+            title="检查更新",text="正在检查 moonflow 更新…",dismissable=false,on_cancel=Update.cancel}
         operation.dialog:show()
     end
     local urls={
@@ -207,7 +207,7 @@ function Update.download(r,automatic)
     settings().downloaded_update=nil;save()
     if not automatic then
         operation.dialog=require("ui.themes.widgets.progress_dialog"):new{
-            title="下载 Moon Color "..r.version,dismissable=false,on_cancel=Update.cancel}
+            title="下载 moonflow "..r.version,dismissable=false,on_cancel=Update.cancel}
         operation.dialog:show()
     end
     local urls=mirrors(r)
@@ -258,20 +258,20 @@ function Update.confirmInstall(r)
     local cached=Update.cached()
     if not cached or cached.sha256~=r.sha256 then notice("安装包不存在，请重新下载");return end
     require("ui.themes.widgets.confirm"):new{
-        title="安装 Moon Color "..r.version,ok_text="安装并重启",
-        text="将替换 Moon Color 插件并重启 KOReader。主题与设置会保留，旧版目录会备份。",
+        title="安装 moonflow "..r.version,ok_text="安装并重启",
+        text="将替换 moonflow 插件并重启 KOReader。主题与设置会保留，旧版目录会备份。",
         ok_callback=function()Update.install(r)end,
     }:show()
 end
 function Update.install(r)
     if op or not awake()then return false end
-    if not root or not root:match("/mooncolor%.koplugin$")then notice("无法定位 Moon Color 插件目录");return false end
+    if not root or not root:match("/mooncolor%.koplugin$")then notice("无法定位 moonflow 插件目录");return false end
     if not validRelease(r)or not Update.newer(r.version,version())then notice("更新信息无效");return false end
     local cached=Update.cached()
     if not cached or cached.sha256~=r.sha256 then notice("请先下载更新");return false end
     local operation={};op=operation
     operation.dialog=require("ui.themes.widgets.progress_dialog"):new{
-        title="安装 Moon Color 更新",text="正在校验和安装，请勿关闭设备…",dismissable=false}
+        title="安装 moonflow 更新",text="正在校验和安装，请勿关闭设备…",dismissable=false}
     operation.dialog:show()
     track(operation,"installing",function(alive)
         return require("workers.job").run(function()
@@ -289,7 +289,7 @@ function Update.install(r)
                 if not alive()then return end
                 local error=tostring(reason)
                 if error:find("checksum mismatch",1,true)or error:find("archive version mismatch",1,true)
-                    or error:find("invalid archive",1,true)or error:find("not a Moon Color",1,true)then
+                    or error:find("invalid archive",1,true)or error:find("not a moonflow",1,true)then
                     ready=nil;settings().downloaded_update=nil;save();os.remove(archivePath())
                 end
                 fail(operation,reason)
@@ -331,7 +331,7 @@ function Update.schedule(desk)
         local elapsed=os.time()-last
         if (last>0 and elapsed>=0 and elapsed<Update.INTERVAL)or not connected()then return end
     end
-    scheduled=require("ui.guard").wrap("Moon Color auto update",function()
+    scheduled=require("ui.guard").wrap("moonflow auto update",function()
         scheduled=nil
         if canPrompt()then Update.autoCheck()end
     end)

@@ -74,11 +74,11 @@ local function scenario(fn)
     end
     os.time=function()return c.clock end
     local digest=python_sha256(c.payload)
-    c.release={version="3.1.0",tag="v3.1.0",url="https://github.com/W-Boat/mooncolor/releases/tag/v3.1.0",
-        download_url="https://github.com/W-Boat/mooncolor/releases/download/v3.1.0/mooncolor.koplugin-3.1.0.zip",
+    c.release={version="3.2.0",tag="v3.2.0",url="https://github.com/W-Boat/mooncolor/releases/tag/v3.2.0",
+        download_url="https://github.com/W-Boat/mooncolor/releases/download/v3.2.0/mooncolor.koplugin-3.2.0.zip",
         size=#c.payload,sha256=digest,notes="更新",available=true}
-    c.json={tag_name="v3.1.0",body="更新",assets={{
-        name="mooncolor.koplugin-3.1.0.zip",size=#c.payload,digest="sha256:"..digest,
+    c.json={tag_name="v3.2.0",body="更新",assets={{
+        name="mooncolor.koplugin-3.2.0.zip",size=#c.payload,digest="sha256:"..digest,
         browser_download_url=c.release.download_url}}}
     package.loaded.json={decode=function()return c.json end}
     package.loaded["ffi/sha2"]={sha256=function()
@@ -89,7 +89,7 @@ local function scenario(fn)
     end}
     c.entries={
         {path="mooncolor.koplugin/main.lua",body="new version",mode="file"},
-        {path="mooncolor.koplugin/_meta.lua",body='return {version="3.1.0"}',mode="file"},
+        {path="mooncolor.koplugin/_meta.lua",body='return {version="3.2.0"}',mode="file"},
         {path="mooncolor.koplugin/moon_source.lua",body="return {}",mode="file"},
         {path="mooncolor.koplugin/mooncolor_engine.lua",body="return {}",mode="file"},
         {path="mooncolor.koplugin/mooncolor_update.lua",body="return {}",mode="file"},
@@ -214,7 +214,7 @@ end)end)
 check("updater-manual-check-bypasses-daily-backoff-and-synchronous-callbacks-settle",function()scenario(function(c)
     c.Update.autoCheck();assert(not c.Update.busy())
     c.fs["/data/.moon/mooncolor-update.zip"]=nil;saved.downloaded_update=nil
-    c.Update.check(function(r)assert(r.version=="3.1.0")end,false)
+    c.Update.check(function(r)assert(r.version=="3.2.0")end,false)
     assert(c.requests==2 and not c.Update.busy())
 end)end)
 check("updater-suspend-cancels-download-and-ignores-late-callback",function()scenario(function(c)
@@ -267,7 +267,7 @@ end)end)
 check("installer-rollback-preserves-original-after-rename-failure",function()scenario(function(c)
     c.write("/data/.moon/mooncolor-update.zip",c.payload)
     c.failSwap=true
-    local ok=c.Install.run("/data/.moon/mooncolor-update.zip",c.root,c.release.sha256,"3.1.0")
+    local ok=c.Install.run("/data/.moon/mooncolor-update.zip",c.root,c.release.sha256,"3.2.0")
     assert(not ok and c.fs[c.root.."/main.lua"].data=="old version")
     assert(not c.fs["/plugins/.mooncolor.koplugin-update"])
 end)end)
@@ -284,7 +284,7 @@ end)end)
 check("installer-extraction-failure-keeps-current-files-and-cleans-staging",function()scenario(function(c)
     c.entries={{path="mooncolor.koplugin/../escape.lua",mode="file",body="bad"}}
     c.write("/data/.moon/mooncolor-update.zip",c.payload)
-    assert(not c.Install.run("/data/.moon/mooncolor-update.zip",c.root,c.release.sha256,"3.1.0"))
+    assert(not c.Install.run("/data/.moon/mooncolor-update.zip",c.root,c.release.sha256,"3.2.0"))
     assert(c.fs[c.root.."/main.lua"].data=="old version")
     assert(not c.fs["/plugins/.mooncolor.koplugin-update"])
 end)end)

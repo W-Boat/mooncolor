@@ -12,7 +12,7 @@ local function text(value)
     value=value:match("^%s*(.-)%s*$")
     return value~=""and value or nil
 end
-function Loading.metadata(file,props)
+function Loading.metadata(file,props,with_cover)
     local book,identity={},nil
     local ok,Store=pcall(require,"book.store")
     if ok and type(Store.identityFor)=="function"then
@@ -24,6 +24,7 @@ function Loading.metadata(file,props)
     base=base:gsub("%.[^%.]+$","")
     local meta={title=text(book.title)or text(props.display_title)or text(props.title)or base,
         authors=text(book.authors)or text(props.authors)or"作者未记录",file=file}
+    if with_cover==false then return meta end
     local lfs=require("libs/libkoreader-lfs")
     local function localFile(path)
         if type(path)~="string"or path:match("^%a[%w+.-]*://")then return end
@@ -37,7 +38,7 @@ function Loading.metadata(file,props)
             if found then meta.cover=localFile(path)end
         end
     end
-    meta.cover=meta.cover or localFile(book.cover)
+    meta.cover=meta.cover or localFile(book.cover_url)or localFile(book.cover)
     if not meta.cover then
         local Download=package.loaded["ui.themes.widgets.image.download"]
         local url=text(book.cover_url)or text(book.cover)
@@ -47,6 +48,26 @@ function Loading.metadata(file,props)
         end
     end
     return meta
+end
+-- Read Moon's public cache/fallback interface only. Never call ensure/fetch:
+-- opening a document must not wait for a quote request or repaint for its reply.
+function Loading.quote()
+    local ok,Hitokoto=pcall(require,"online.hitokoto")
+    if not ok or type(Hitokoto)~="table"then return end
+    local function read(fn,owner)
+        if type(fn)~="function"then return end
+        local good,data=pcall(fn,owner)
+        if not good or type(data)~="table"then return end
+        local body=text(data.text)
+        if not body then return end
+        local source=text(data.source)
+        if not source then
+            local author,title=text(data.author),text(data.title)
+            source=author and title and(author.." · "..title)or author or title
+        end
+        return {text=body,source=source}
+    end
+    return read(Hitokoto.current,Hitokoto)or read(Hitokoto.fallback)
 end
 function Loading.make(file,metadata)
     local Modal=require("ui.themes.widgets.modal")
@@ -63,10 +84,11 @@ function Loading.make(file,metadata)
     local h=splash.dimen.h
     local cover_h=math.max(48,math.floor(h*.27))
     local cover_w=math.floor(cover_h*2/3)
-    local meta=metadata or Loading.metadata(file)
+    local show_cover=require("mooncolor_engine").config().loading_style~="simple"
+    local meta=metadata or Loading.metadata(file,nil,show_cover)
     splash.book=meta
     local cover
-    if meta.cover then
+    if show_cover and meta.cover then
         local widget
         local ok,image=pcall(function()
             widget=require("ui/widget/imagewidget"):new{file=meta.cover,
@@ -77,13 +99,9 @@ function Loading.make(file,metadata)
         end)
         if ok then cover=image elseif widget and widget.free then pcall(widget.free,widget)end
     end
-    if not cover then
-        local ok,widget=pcall(function()
-            return require("ui.widgets.plain_cover"):new{title=meta.title,author=meta.authors,width=cover_w,height=cover_h}
-        end)
-        cover=ok and widget or Box:new{style=Theme.current().card,width=cover_w,height=cover_h,
-            Text.line("title","月读",{width=cover_w})}
-    end
+    splash.has_cover=cover and true or false
+    local quote=show_cover and not cover and Loading.quote()or nil
+    splash.quote=quote
     splash.bar=Progress:new{width=width,percent=0}
     splash.detail=Text.line("caption","正在准备阅读",{width=width})
     splash.detail_frame=Box:new{style={bg=255},width=width,height=Theme.px(36),splash.detail}
@@ -92,16 +110,28 @@ function Loading.make(file,metadata)
         return CC:new{dimen=Geom:new{w=width,h=widget:getSize().h},widget}
     end
     local group=VG:new{align="center",
-        centered(Text.line("caption","MOON · 月读",{width=width})),
+        centered(Text.line("caption","moonflow · 月读",{width=width})),
         VS:new{width=gap*2},
-        CC:new{dimen=Geom:new{w=width,h=cover_h},cover},
-        VS:new{width=gap*2},
-        Text.box("title",meta.title,width,{align="center",max_lines=2}),
-        VS:new{width=gap},
-        centered(Text.line("caption",meta.authors,{width=width,color=Theme.current().color.muted})),
-        VS:new{width=gap*3},splash.bar,
-        VS:new{width=gap},splash.detail_frame,
     }
+    if cover then
+        group[#group+1]=CC:new{dimen=Geom:new{w=width,h=cover_h},cover}
+        group[#group+1]=VS:new{width=gap*2}
+    elseif quote then
+        local quotation=VG:new{align="center",
+            Text.box("body",quote.text,width,{align="center",max_lines=5})}
+        if quote.source then
+            local source=quote.source:match("^——")and quote.source or("—— "..quote.source)
+            quotation[#quotation+1]=VS:new{width=gap}
+            quotation[#quotation+1]=centered(Text.line("caption",source,{width=width,color=Theme.current().color.muted}))
+        end
+        group[#group+1]=CC:new{dimen=Geom:new{w=width,h=math.max(cover_h,quotation:getSize().h)},quotation}
+        group[#group+1]=VS:new{width=gap*2}
+    end
+    group[#group+1]=Text.box("title",meta.title,width,{align="center",max_lines=2})
+    group[#group+1]=VS:new{width=gap}
+    group[#group+1]=centered(Text.line("caption",meta.authors,{width=width,color=Theme.current().color.muted}))
+    group[#group+1]=VS:new{width=gap*3};group[#group+1]=splash.bar
+    group[#group+1]=VS:new{width=gap};group[#group+1]=splash.detail_frame
     splash:setPanel(Box:new{style={bg=255},width=splash.dimen.w,height=h,group})
     splash.onTapModal=function()return true end
     splash.onSwipeModal=function()return true end
@@ -110,7 +140,8 @@ end
 local function sameFile(file)
     if not current or current.file~=file or current.closed then return false end
     local screen=require("device").screen
-    return current.splash.dimen.w==screen:getWidth()and current.splash.dimen.h==screen:getHeight()
+    return current.style==require("mooncolor_engine").config().loading_style
+        and current.splash.dimen.w==screen:getWidth()and current.splash.dimen.h==screen:getHeight()
 end
 function Loading.finish()
     local state=current
@@ -129,8 +160,8 @@ end
 local function begin(file,props)
     if sameFile(file)then return current end
     Loading.finish()
-    local state={file=file}
-    state.splash=Loading.make(file,Loading.metadata(file,props))
+    local state={file=file,style=require("mooncolor_engine").config().loading_style}
+    state.splash=Loading.make(file,Loading.metadata(file,props,state.style~="simple"))
     current=state
     local splash=state.splash
     local paint=splash.paintTo

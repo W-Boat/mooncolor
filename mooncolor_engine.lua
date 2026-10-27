@@ -1,6 +1,8 @@
 -- Small extension runtime. Theme and color rendering belong to Moon itself.
-local Engine={ID="ext.mooncolor",VERSION="3.0.0",installed=false,suspended=false,coverage={}}
-local defaults={enabled=true,navbar_style="pill",navbar_labels=true,loading_screen=true}
+local Engine={ID="ext.mooncolor",VERSION="3.1.0",installed=false,suspended=false,coverage={}}
+local defaults={enabled=true,navbar_style="pill",navbar_labels=true,navbar_compact=false,
+    sidebar_style="pill",sidebar_labels=true,sidebar_compact=false,
+    loading_screen=true,loading_style="book"}
 local config,Settings
 function Engine.reload()config=nil end
 function Engine.config()
@@ -12,6 +14,11 @@ function Engine.config()
         if type(saved[key])==type(value)then config[key]=saved[key]else config[key]=value end
     end
     if config.navbar_style~="pill"and config.navbar_style~="line"then config.navbar_style="pill"end
+    for _,key in ipairs{"style","labels","compact"}do
+        if saved["sidebar_"..key]==nil then config["sidebar_"..key]=config["navbar_"..key]end
+    end
+    if config.sidebar_style~="pill"and config.sidebar_style~="line"then config.sidebar_style="pill"end
+    if config.loading_style~="book"and config.loading_style~="simple"then config.loading_style="book"end
     return config
 end
 function Engine.status()
@@ -33,7 +40,7 @@ function Engine.install()
     end)
     if not ok then
         for i=#undo,1,-1 do local item=undo[i];item.object[item.key]=item.old end
-        Engine.error="Moon Color 未启用："..tostring(err)
+        Engine.error="moonflow 未启用："..tostring(err)
         return false
     end
     Engine.installed,Engine.error=true,nil
@@ -48,7 +55,8 @@ end
 function Engine.set(key,value,desktop)
     if not Engine.install()then return false end
     if defaults[key]==nil or type(defaults[key])~=type(value)then return false end
-    if key=="navbar_style"and value~="pill"and value~="line"then return false end
+    if(key=="navbar_style"or key=="sidebar_style")and value~="pill"and value~="line"then return false end
+    if key=="loading_style"and value~="book"and value~="simple"then return false end
     if Engine.config()[key]==value then return true end
     Settings.getSource(Engine.ID)[key]=value
     Settings.saveSource(Engine.ID)
@@ -56,7 +64,7 @@ function Engine.set(key,value,desktop)
     if (key=="enabled"and not value)or(key=="loading_screen"and not value)then
         require("mooncolor_loading").finish()
     end
-    if key~="loading_screen"then Engine.refresh(desktop)end
+    if key~="loading_screen"and key~="loading_style"then Engine.refresh(desktop)end
     return true
 end
 function Engine.suspend()

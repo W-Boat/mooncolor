@@ -75,7 +75,7 @@ function Install.run(archive,root,digest,version)
     if ok then
         for _,name in ipairs{"main.lua","_meta.lua","moon_source.lua","mooncolor_engine.lua",
             "mooncolor_nav.lua","mooncolor_loading.lua","mooncolor_update.lua","mooncolor_install.lua"}do
-            if lfs.symlinkattributes(nextRoot.."/"..name,"mode")~="file"then ok,err=nil,"not a Moon Color archive";break end
+            if lfs.symlinkattributes(nextRoot.."/"..name,"mode")~="file"then ok,err=nil,"not a moonflow archive";break end
         end
     end
     if ok then

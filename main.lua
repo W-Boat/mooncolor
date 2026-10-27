@@ -13,11 +13,11 @@ function MoonColor:init()
     end)
 end
 function MoonColor:addToMainMenu(items)
-    items.mooncolor={text="Moon Color · 界面增强",sorting_hint="more_tools",callback=function()
+    items.mooncolor={text="moonflow",sorting_hint="more_tools",callback=function()
         local Engine=require("mooncolor_engine");Engine.install()
         require("ui/uimanager"):show(require("ui/widget/infomessage"):new{
-            text="Moon Color "..Engine.VERSION.."\n"..Engine.status()
-                .."\n\n月读 → 设置 → 桌面 → 底栏与开书遮罩。\n颜色请在月读官方显示设置中调整。"})
+            text="moonflow "..Engine.VERSION.."\n"..Engine.status()
+                .."\n\n月读 → 设置 → 桌面 → moonflow。\n颜色请在月读官方显示设置中调整。"})
     end}
 end
 function MoonColor:onSuspend()
@@ -29,13 +29,17 @@ function MoonColor:onResume()
 end
 function MoonColor:onReaderReady()
     local Loading=package.loaded.mooncolor_loading;if Loading then Loading.finish()end
+    local Engine=package.loaded.mooncolor_engine
+    if Engine and Engine.attachSidebar then Engine.attachSidebar()end
 end
-MoonColor.onCloseDocument=MoonColor.onReaderReady
+function MoonColor:onCloseDocument()
+    local Loading=package.loaded.mooncolor_loading;if Loading then Loading.finish()end
+end
 function MoonColor:onNetworkConnected()
     local Update=package.loaded.mooncolor_update;if Update then Update.schedule()end
 end
 function MoonColor:onExit()
-    self:onReaderReady()
+    self:onCloseDocument()
     local Update=package.loaded.mooncolor_update;if Update then Update.onExit()end
 end
 return MoonColor

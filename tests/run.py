@@ -17,6 +17,9 @@ Settings.saveSource=function(id)assert(id=="ext.mooncolor");saves=saves+1 end
 metadata_rows,metadata_reads={},0
 package.loaded["book.store"]={identityFor=function(file)
     metadata_reads=metadata_reads+1;return metadata_rows[file] end}
+package.loaded["online.hitokoto"]={current=function()return {text="纸上有光，书中有路。",source="月读测试缓存"}end,
+    fallback=function()return {text="离线一言。",source="月读测试回退"}end,
+    ensure=function()error("opening must not request a quote")end}
 package.loaded["utils.paths"]={coverPath=function(id,sid)return "/covers/"..sid.."/"..id..".png"end}
 package.loaded["libs/libkoreader-lfs"]={attributes=function(file,field)
     if file=="/covers/local/test.png"or file=="/cover.png"then return "file"end end}
@@ -61,6 +64,7 @@ end
 def runtime():
     vm=LuaRuntime(unpack_returned_tuples=True)
     vm.execute(f"package.path='{moon}/tests/?.lua;{moon}/book.koplugin/?.lua;{moon}/book.koplugin/?/init.lua;{plugin}/?.lua;'..package.path")
+    vm.globals().PLUGIN_ROOT=plugin
     vm.execute(BOOT)
     return vm
 
@@ -212,15 +216,16 @@ check("settings-only-show-navigation-loading-and-update",function()
     assert(not source.provides.features.panel)
     local U=require("mooncolor_update")
     local row=source.provides.features.setting.entries({})[1]
-    local sections=row.page.sections();assert(#sections==2)
-    assert(#sections[1].rows==4 and #sections[2].rows==3)
+    local sections=row.page.sections();assert(#sections==4)
+    assert(#sections[1].rows==4 and #sections[2].rows==3 and #sections[3].rows==2 and #sections[4].rows==3)
 end)
 ''')
 lua.globals().python_sha256=lambda text:hashlib.sha256(text.encode('utf-8')).hexdigest()
 lua.execute((ROOT/'tests/update.lua').read_text(encoding='utf-8'))
+lua.execute((ROOT/'tests/interface.lua').read_text(encoding='utf-8'))
 results=[dict(x.items())for x in lua.globals().results.values()]
-report={'version':'3.0.0','passed':len(results),'moon_source':moon,'cases':results,
+report={'version':'3.1.0','passed':len(results),'moon_source':moon,'cases':results,
         'method':'Actual Moon widgets/themes and loading code; transport, filesystem, device, fonts and reader host boundaries stubbed.',
         'limitations':'No device timing or waveform validation.'}
 (ROOT/'test-results.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-print(f"{len(results)} Moon Color 3.0 checks passed")
+print(f"{len(results)} moonflow 3.1 checks passed")
