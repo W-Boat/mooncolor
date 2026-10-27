@@ -1,14 +1,9 @@
 # 回归
 
-安装 Python 与 lupa：python -m pip install lupa
+需要 Python 与 lupa（LuaJIT 2.1）。设置 MOON_TEST_SOURCE 为月读源码根目录，
+内含 book.koplugin 和 tests，运行 python tests/run.py。
 
-准备 Moon v0.2.43（或 v0.2.45）及 KOReader v2026.07 源码。
-设置 MOON_TEST_SOURCE 为 Moon 源码根目录（包含 tests 和 book.koplugin）。
-设置 KOREADER_TEST_SOURCE 为 KOReader 源码根目录（包含 frontend）。
-运行 python tests/run.py，报告写入 test-results.json。
-像素比较：设置 KOREADER_BLITBUFFER_SOURCE 为 koreader-base 的 ffi/blitbuffer.lua，
-运行 python tests/pixels.py；报告写入 pixel-test-results.json。
-
-使用真实 Moon 控件、首页、图书馆、侧栏、图片队列与 KOReader
-LineWidget/BottomContainer；主机设备、字体、网络、文件和 ReaderUI /
-ReaderRolling 入口有测试桩，不能代替 Kobo 实机开书测试。
+彩色兼容使用 Moon 提交 033b6a3777f4d35a22e0a4d435b41960f2ef156b，
+同时检查 Moon 0.2.43 的灰度兼容。报告写入 test-results.json。
+测试使用真实 Moon 主题、控件与插件逻辑；字体、设备、ReaderUI/ReaderRolling、
+网络与文件系统是边界桩，不代表 Kobo 实机刷新和耗时。

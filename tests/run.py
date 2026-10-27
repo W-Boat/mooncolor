@@ -1,399 +1,226 @@
 from pathlib import Path
-import sys
-import json
-import os
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'work/test-deps'))
+import os,sys,json,hashlib
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/'work/test-deps'))
 from lupa.luajit21 import LuaRuntime
-
-lua = LuaRuntime(unpack_returned_tuples=True)
-moon = Path(os.environ.get('MOON_TEST_SOURCE', ROOT / 'work/moon')).as_posix()
-plugin = Path(os.environ.get('MOON_COLOR_TEST_PLUGIN', ROOT)).as_posix()
-TESTING_V21 = any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.1.0','2.2.0','2.3.0','2.4.0'])
-lua.execute(f"package.path = '{moon}/tests/?.lua;{moon}/book.koplugin/?.lua;{moon}/book.koplugin/?/init.lua;{plugin}/?.lua;' .. package.path")
-BOOT = '''
-Kit = require("support.widget_stubs")
-Kit.install("paper")
--- Use KOReader's real line drawing implementation, not the no-op test leaf.
-package.loaded["ui/widget/linewidget"] = nil
-package.preload["ui/widget/linewidget"] = function()
-    return dofile(KOREADER_ROOT .. "/frontend/ui/widget/linewidget.lua")
-end
-package.loaded["ui/widget/container/bottomcontainer"] = nil
-package.preload["ui/widget/container/bottomcontainer"] = function()
-    return dofile(KOREADER_ROOT .. "/frontend/ui/widget/container/bottomcontainer.lua")
-end
-local plain_canvas = Kit.canvas
-Kit.canvas = function()
-    local bb=plain_canvas()
-    local function gray(c)
-        if type(c)=="table" and c.rgb then return math.floor(c.r*0.3+c.g*0.59+c.b*0.11) end
-        return c
-    end
-    local rounded,border=bb.paintRoundedRect,bb.paintBorder
-    bb.paintRect=function(_,x,y,w,h,c) bb.ops[#bb.ops+1]={op="rect",x=x,y=y,w=w,h=h,c=gray(c)} end
-    bb.paintRoundedRect=function(self,x,y,w,h,c,r) return rounded(self,x,y,w,h,gray(c),r) end
-    bb.paintBorder=function(self,x,y,w,h,bw,c,r) return border(self,x,y,w,h,bw,gray(c),r) end
-    bb.paintRectRGB32=function(_,x,y,w,h,c) bb.ops[#bb.ops+1]={op="rect",x=x,y=y,w=w,h=h,c=c,rgb_api=true} end
-    bb.paintRoundedRectRGB32=function(self,x,y,w,h,c,r) rounded(self,x,y,w,h,c,r);bb.ops[#bb.ops].rgb_api=true end
-    bb.paintBorderRGB32=function(self,x,y,w,h,bw,c,r) border(self,x,y,w,h,bw,c,r);bb.ops[#bb.ops].rgb_api=true end
-    return bb
-end
-Device = require("device")
-Device.hasColorScreen = function() return true end
-Device.hasKaleidoWfm = function() return true end
-Device.screen.isColorEnabled = function() return true end
-BB = require("ffi/blitbuffer")
-BB.Color8 = function(v)
-    assert(type(v) == "number" and v >= 0 and v <= 255, "RGB token leaked to grayscale constructor: " .. tostring(v))
-    return v
-end
-original_color8 = BB.Color8
-BB.ColorRGB32 = function(r,g,b,a) return {r=r,g=g,b=b,a=a, rgb=true} end
-saved, saves = {}, 0
-local Settings = require("utils.settings")
-Settings.getSource = function(id) assert(id == "ext.mooncolor"); return saved end
-Settings.saveSource = function(id) assert(id == "ext.mooncolor"); saves=saves+1 end
-package.loaded["logger"] = {warn=function() end}
-package.loaded["utils.log"] = {warn=function() end}
-package.loaded["ui.guard"] = {
-    wrap=function(_,fn) return fn end,
-    call=function(_,fn,...) return fn(...) end,
-}
-package.loaded["ui.exit_windows"] = {exiting=false}
-package.loaded["utils.paths"] = {}
-package.loaded["libs/libkoreader-lfs"] = {}
-package.loaded["ui.widgets.plain_cover"] = {}
-if PLUGIN_UNDER_TEST == "2.1" then
-    metadata_rows,metadata_reads={},0
-    package.loaded["book.store"]={identityFor=function(file)
-        metadata_reads=metadata_reads+1
-        return metadata_rows[file]
-    end}
-    package.loaded["ui.themes.widgets.image.core"]=nil
-    package.preload["ui.themes.widgets.image.core"]=nil
-    package.loaded["ui.themes.widgets.image.download"] = {cached=function()end}
-    package.loaded["ui/widget/imagewidget"] = {
-        new=function(_,opts)
-            opts.dimen={w=opts.width or 10,h=opts.height or 10}
-            opts.getSize=function(self)return self.dimen end
-            opts.free=function()end
-            opts.paintTo=function()end
-            return opts
-        end,
-    }
-    package.loaded["ui/widget/infomessage"]={new=function(_,opts)return opts end}
-    package.loaded["apps/reader/readerui"]={
-        showReaderCoroutine=function(self,file,provider,seamless)
-            self.notice=require("ui/widget/infomessage"):new{timeout=0,invisible=seamless,text=file}
-            if self.raise then error("open failed")end
-        end,
-    }
-    package.loaded["apps/reader/modules/readerrolling"]={showEngineProgress=function(self,p)
-        self.native_calls=(self.native_calls or 0)+1
-    end}
-    clock_time=100
-    package.loaded["socket"]={gettime=function()return clock_time end}
-end
--- Data and host boundaries only; home widgets, calculations, mask and panel code are real Moon Lua.
-package.loaded["book.catalog"] = {libraryScope=function(id)return id end,formatDuration=function(n)return tostring(math.floor(n/60)).."分钟"end}
-package.loaded["book.stats_db"] = {
-    dailyBySource=function()
-        home_db_reads=(home_db_reads or 0)+1
-        local days={};for i=0,30 do days[#days+1]={ymd=os.date("%Y-%m-%d",os.time()-i*86400),seconds=(i%5)*900,pages=i+1}end
-        return days
-    end,progressBooks=function()return {}end,
-}
-package.loaded["source.base"] = {SourceCapabilities={}}
-package.loaded["desktop.reader_exit"] = {}
-package.loaded["features.panel.menu"] = {}
-package.loaded["features.panel.native_settings"] = {}
-Kit.sections.insight={month_goal_hours=10,year_goal_books=20}
-Kit.sections.home={home_stats_opacity=100}
-Engine = require("mooncolor_engine")
-assert(Engine.install(), Engine.error)
-assert(Engine.active())
-Theme = require("ui.themes")
-results = {}
-function check(name, fn)
-    local ok, err = pcall(fn)
-    assert(ok, name .. ": " .. tostring(err))
-    results[#results+1] = {name=name, passed=true}
-end
-function rgb(c) return type(c)=="table" and c.rgb==true end
-'''.replace('KOREADER_ROOT', json.dumps(Path(os.environ.get('KOREADER_TEST_SOURCE', ROOT / 'work/koreader-2026.07')).as_posix()))
-BOOT = BOOT.replace('PLUGIN_UNDER_TEST', json.dumps('2.1' if TESTING_V21 else '2.0'))
-lua.execute(BOOT)
-lua.execute('''
-check("global-grayscale-constructor-unchanged", function() assert(BB.Color8==original_color8); assert(BB.Color8(128)==128) end)
-local Button = require("ui.themes.widgets.button")
-local Row = require("ui.themes.widgets.row")
-local Tabbar = require("ui.themes.widgets.tabbar")
-local Progress = require("ui.themes.widgets.progress")
-local Box = require("ui.themes.widgets.box")
-for _, theme_id in ipairs(Theme.ids) do
-  for _, palette in ipairs(Engine.palettes) do
-    check(theme_id .. "/" .. palette.id .. "/actual-Moon-widgets", function()
-      Kit.use(theme_id)
-      Engine.set("palette", palette.id)
-      local raw = Theme.get(theme_id)
-      assert(raw.button.primary.bg < 256 and raw.selected.ink < 256)
-      local t = Theme.current()
-      assert(t ~= raw and t.button.primary.bg > 0xFFFFFF)
-      assert(t.color.ink==0 and t.color.page==255)
-      local bb = Kit.canvas()
-      Button:new{text="确定", variant="primary", width=200}:paintTo(bb,0,0)
-      Row.widget{width=550,title="选中条目",selected=true}:paintTo(bb,0,100)
-      Tabbar.widget{width=550, tabs={{id="a",text="首页",icon="home"},{id="b",text="设置",icon="settings"}},active="a"}:paintTo(bb,0,200)
-      Progress:new{width=300,percent=43}:paintTo(bb,0,300)
-      local found = false
-      for _, op in ipairs(bb.ops) do if rgb(op.c) then found=true end end
-      assert(found, "no actual RGB paint operations")
-      assert(BB.Color8==original_color8)
-    end)
-  end
-end
-check("primary-button-has-white-label-and-colored-fill", function()
-  local b=Button:new{text="确定",variant="primary",width=150}
-  local labels=Kit.find(b,function(w) return w.text=="确定" and w.fgcolor~=nil end)
-  assert(#labels==1 and labels[1].fgcolor==255)
-  local bb=Kit.canvas(); b:paintTo(bb,0,0); assert(rgb(bb.ops[1].c))
-end)
-check("selected-row-has-colored-text", function()
-  local row=Row.widget{width=550,title="选中",selected=true}
-  local labels=Kit.find(row,function(w) return w.text=="选中" end)
-  assert(#labels==1 and rgb(labels[1].fgcolor))
-end)
-check("optional-card-borders", function()
-  Engine.set("card_edges",true)
-  local box=Box:new{style=Theme.current().card,width=200,height=80}
-  local bb=Kit.canvas();box:paintTo(bb,0,0)
-  local found=false; for _,op in ipairs(bb.ops) do if op.op=="border" and rgb(op.c) then found=true end end
-  assert(found); Engine.set("card_edges",false)
-end)
-check("toggles-respect-disabled-sections", function()
-  for _,key in ipairs{"buttons","tabs","progress"} do Engine.set(key,false) end
-  local t=Theme.current(); assert(t.button.primary.bg<256 and t.selected.ink<256 and t.progress.fill<256)
-  for _,key in ipairs{"buttons","tabs","progress"} do Engine.set(key,true) end
-end)
-check("disable-and-reenable", function()
-  Engine.set("enabled",false);assert(Theme.current()==Theme.get(Theme.id()))
-  Engine.set("enabled",true);assert(Theme.current()~=Theme.get(Theme.id()))
-end)
-check("night-mode-falls-back", function()
-  Device.screen.night_mode=true;assert(not Engine.active());assert(Theme.current()==Theme.get(Theme.id()))
-  Device.screen.night_mode=false
-end)
-check("monochrome-device-falls-back", function()
-  Device.hasColorScreen=function() return false end;assert(not Engine.active());assert(Theme.current()==Theme.get(Theme.id()))
-  Device.hasColorScreen=function() return true end
-end)
-check("color-disabled-falls-back", function()
-  Device.screen.isColorEnabled=function() return false end;assert(not Engine.active());assert(Theme.current()==Theme.get(Theme.id()))
-  Device.screen.isColorEnabled=function() return true end
-end)
-check("invalid-settings-and-key-are-rejected", function()
-  assert(not Engine.set("palette","invalid"));assert(not Engine.set("bogus",nil))
-  saved.palette="invalid";Engine.reload();assert(Engine.config().palette=="ocean");saved.palette="ocean";Engine.reload()
-end)
-check("repeat-install-is-idempotent", function()
-  local fn=Theme.current;assert(Engine.install());assert(Theme.current==fn)
-end)
+moon=Path(os.environ.get('MOON_TEST_SOURCE',ROOT/'work/moon-nativecolor')).as_posix()
+plugin=Path(os.environ.get('MOON_COLOR_TEST_PLUGIN',ROOT)).as_posix()
+BOOT='''
+Kit=require("support.widget_stubs");Kit.install("paper")
+Device=require("device");BB=require("ffi/blitbuffer")
+BB.Color8=function(n)assert(type(n)=="number"and n>=0 and n<=255,"RGB leaked to grayscale");return n end
+saved={navbar_labels=false,navbar_style="line",palette="custom",custom_colors={primary="#ff0000"},
+    fast_covers=true,quality_refresh=true};saves=0
+local Settings=require("utils.settings")
+Settings.getSource=function(id)assert(id=="ext.mooncolor");return saved end
+Settings.saveSource=function(id)assert(id=="ext.mooncolor");saves=saves+1 end
+metadata_rows,metadata_reads={},0
+package.loaded["book.store"]={identityFor=function(file)
+    metadata_reads=metadata_reads+1;return metadata_rows[file] end}
+package.loaded["utils.paths"]={coverPath=function(id,sid)return "/covers/"..sid.."/"..id..".png"end}
+package.loaded["libs/libkoreader-lfs"]={attributes=function(file,field)
+    if file=="/covers/local/test.png"or file=="/cover.png"then return "file"end end}
+decoded,freed=0,0
+package.loaded["ui/widget/imagewidget"]={new=function(_,opts)
+    decoded=decoded+1
+    opts.dimen={w=opts.width,h=opts.height}
+    opts.getSize=function(self)return self.dimen end
+    opts.paintTo=function()end;opts.free=function()freed=freed+1 end
+    return opts end}
+package.loaded["ui/widget/infomessage"]={new=function(_,opts)return opts end}
+package.loaded["apps/reader/readerui"]={showReaderCoroutine=function(self,file,provider,seamless)
+    self.notice=require("ui/widget/infomessage"):new{timeout=0,invisible=seamless,text=file}
+    if self.extra then self.extra_notice=require("ui/widget/infomessage"):new{timeout=0,text="another"}end
+    if self.raise then error("open failed")end
+    return "opened" end}
+package.loaded["apps/reader/modules/readerrolling"]={showEngineProgress=function(self)
+    self.native_calls=(self.native_calls or 0)+1 end}
+clock_time=100;package.loaded.socket={gettime=function()return clock_time end}
+package.loaded["ui.guard"]={wrap=function(_,fn)return fn end,
+    call=function(_,fn,...)local ok,a,b=pcall(fn,...);assert(ok,a);return ok,a,b end}
+package.loaded["ui.exit_windows"]={exiting=false}
 local UI=require("ui/uimanager")
-check("default-keeps-original-refresh-opt-in-uses-color-waveform", function()
-  UI:setDirty({book_window=true},"ui");assert(Kit.dirty[#Kit.dirty].mode=="ui")
-  Engine.set("quality_refresh",true)
-  UI:setDirty({book_window=true},"ui");assert(Kit.dirty[#Kit.dirty].mode=="full")
-end)
-check("native-and-reader-refresh-unchanged", function()
-  UI:setDirty({},"ui");assert(Kit.dirty[#Kit.dirty].mode=="ui")
-  UI:setDirty("all","ui");assert(Kit.dirty[#Kit.dirty].mode=="ui")
-end)
-check("small-clock-region-remains-ui", function()
-  UI:setDirty({book_window=true},"ui",{w=600,h=20});assert(Kit.dirty[#Kit.dirty].mode=="ui")
-end)
-check("fast-progress-remains-fast", function()
-  UI:setDirty({book_window=true},"fast");assert(Kit.dirty[#Kit.dirty].mode=="fast")
-end)
-check("refresh-callback-preserves-region-and-dither", function()
-  UI:setDirty({book_window=true},function() return "ui",{w=600,h=700},true end)
-  local mode,region,dither=Kit.dirty[#Kit.dirty].mode();assert(mode=="full" and region.h==700 and dither==true)
-end)
-check("quality-refresh-toggle", function()
-  Engine.set("quality_refresh",false);UI:setDirty({book_window=true},"ui");assert(Kit.dirty[#Kit.dirty].mode=="ui")
-  Engine.set("quality_refresh",false)
-end)
-check("extension-contract-and-settings-rows", function()
-  local desc=dofile(PLUGIN_ROOT .. "/moon_source.lua")
-  assert(desc.api==1 and desc.id=="ext.mooncolor" and desc.provides.source==false)
-  local desktop={updateView=function(self) self.updated=true end}
-  local entries=desc.provides.features.setting.entries(desktop)
-  assert(entries[1].group=="desktop")
-  local sections=entries[1].page.sections()
-  assert(#sections[1].rows>=13 and #sections[2].rows==4)
-  for _,make in ipairs(sections[1].rows) do make(550):paintTo(Kit.canvas(),0,0) end
-  local row=sections[1].rows[1](550);Kit.taps(row)[1]:onTapThemeArea();assert(saved.enabled==false and desktop.updated)
-  Engine.set("enabled",true)
-  local action=desc.provides.features.panel.actions()[1]
-  assert(action.scope=="desktop");desktop.updated=false
-  action.run({ui={book={desktop=desktop}}});assert(saved.enabled==false and desktop.updated)
-  Engine.set("enabled",true)
-end)
-for _, id in ipairs(Theme.ids) do
-  check(id .. "/quick-panel-real-widget", function()
-    Kit.use(id)
-    local ActionButton=require("features.panel.widget.button")
-    local button=ActionButton:new{width=180,height=150,icon="palette",title="彩墨配色",active=true,id="color"}
-    local bb=Kit.canvas();button:paintTo(bb,0,0)
-    local found=false;for _,op in ipairs(bb.ops) do if rgb(op.c) then found=true end end
-    assert(found)
-  end)
+refreshes={};Device.screen.bb=Kit.canvas()
+Device.screen.bb.paintRect=function(self,x,y,w,h,c)
+    self.ops[#self.ops+1]={op="clear",x=x,y=y,w=w,h=h,c=c}end
+Device.screen.refreshUI=function(_,x,y,w,h)refreshes[#refreshes+1]={x=x,y=y,w=w,h=h}end
+originals={Theme=require("ui.themes").current,Color8=BB.Color8,
+    Box=require("ui.themes.widgets.box").paintTo,Dirty=UI.setDirty,Close=UI.close}
+Engine=require("mooncolor_engine")
+assert(Engine.install(),Engine.error)
+Theme=require("ui.themes");Loading=require("mooncolor_loading")
+Reader=require("apps/reader/readerui");Rolling=require("apps/reader/modules/readerrolling")
+Tabbar=require("ui.themes.widgets.tabbar")
+results={}
+function check(name,fn)
+    local ok,err=pcall(fn);assert(ok,name..": "..tostring(err))
+    results[#results+1]={name=name,passed=true}
 end
-check("icon-picker-selected-cell", function()
-  Kit.use("paper")
-  local Picker=require("ui.themes.widgets.icon_picker")
-  local cell=Picker.cellWidget({theme=Theme.current(),current="home",cell_w=120,cell=100},"home")
-  local labels=Kit.find(cell,function(w) return w.text=="home" and w.fgcolor~=nil end)
-  assert(#labels>0);for _,label in ipairs(labels) do assert(rgb(label.fgcolor)) end
-  cell:paintTo(Kit.canvas(),0,0)
+'''
+
+def runtime():
+    vm=LuaRuntime(unpack_returned_tuples=True)
+    vm.execute(f"package.path='{moon}/tests/?.lua;{moon}/book.koplugin/?.lua;{moon}/book.koplugin/?/init.lua;{plugin}/?.lua;'..package.path")
+    vm.execute(BOOT)
+    return vm
+
+lua=runtime()
+lua.execute('''
+check("upgrade-keeps-navigation-and-ignores-all-old-color-performance-settings",function()
+    assert(Engine.config().navbar_style=="line"and not Engine.config().navbar_labels)
+    assert(not Engine.config().palette and not Engine.config().custom_colors)
+    assert(not Engine.config().quality_refresh and not Engine.config().fast_covers)
+    assert(saves==0)
 end)
-check("ordinary-rectangle-really-loses-RGB-in-test-harness", function()
-  local bb=Kit.canvas();bb:paintRect(0,0,20,3,BB.ColorRGB32(20,80,150,255));assert(not rgb(bb.ops[1].c))
-end)
-for _, theme in ipairs(Theme.ids) do
- for _, style in ipairs{"line","pill"} do
-  for _, labels in ipairs{true,false} do
-   check(theme.."/"..style.."/labels-"..tostring(labels).."/navigation-raster",function()
-    Kit.use(theme);Engine.set("navbar_style",style);Engine.set("navbar_labels",labels)
-    local selected,rect=nil,nil
-    local nav=Tabbar.widget{width=551,tabs={{id="a",text="首页",icon="home"},{id="b",text="设置",icon="settings"}},active="a",
-      on_tab=function(id,r)selected,rect=id,r end}
-    local bb=Kit.canvas();nav:paintTo(bb,0,0)
-    local indicator=false
-    for _,op in ipairs(bb.ops) do
-      if style=="line" and op.h==Theme.px(3) and op.w<=Theme.px(28) and op.rgb_api and rgb(op.c) then indicator=true end
-      if style=="pill" and op.op=="border" and op.r>0 and op.rgb_api and rgb(op.c) then indicator=true end
+check("no-theme-BB-widget-refresh-or-private-function-patches",function()
+    local UI=require("ui/uimanager")
+    assert(Theme.current==originals.Theme and BB.Color8==originals.Color8)
+    assert(require("ui.themes.widgets.box").paintTo==originals.Box)
+    assert(UI.setDirty==originals.Dirty and UI.close==originals.Close)
+    for _,name in ipairs{"mooncolor_render","mooncolor_themes","mooncolor_swatch","mooncolor_editor",
+        "mooncolor_decor","mooncolor_controls","mooncolor_perf","mooncolor_home","mooncolor_ticket",
+        "mooncolor_panels","mooncolor_power","mooncolor_surface","mooncolor_quickpanel"}do
+        assert(not package.loaded[name],name)
     end
-    assert(indicator,"missing actual colored active indicator")
-    local found=false;for _,text in ipairs(Kit.texts(nav))do if text=="首页" then found=true end end
-    assert(found==labels)
-    local taps=Kit.taps(nav);assert(#taps==2)
-    assert(taps[1].dimen.w+taps[2].dimen.w==551)
-    assert(taps[1].dimen.h>=Theme.px(44))
-    taps[1]:onTapThemeArea();assert(selected==nil)
-    taps[2]:onTapThemeArea();assert(selected=="b" and rect.w==276)
-    if not labels then assert(taps[1].onMoonNavHold and taps[1].ges_events.MoonNavHold) end
+end)
+check("navigation-options-validate-and-unchanged-values-do-not-save",function()
+    local before=saves
+    assert(Engine.set("navbar_style","line")and saves==before)
+    assert(not Engine.set("palette","ocean"))
+    assert(not Engine.set("navbar_style","invalid"))
+    assert(not Engine.set("navbar_labels","false"))
+end)
+for _,theme in ipairs{"paper","bold","soft"}do
+ for _,style in ipairs{"pill","line"}do
+  for _,labels in ipairs{true,false}do
+   check(theme.."/"..style.."/labels="..tostring(labels),function()
+    Kit.use(theme);Engine.set("navbar_style",style);Engine.set("navbar_labels",labels)
+    local chosen
+    local nav=Tabbar.widget{width=601,tabs={{id="home",text="首页",icon="home"},
+        {id="library",text="图书馆",icon="menu_book"},{id="settings",text="设置",icon="settings"}},
+        active="home",on_tab=function(id)chosen=id end}
+    assert(nav:getSize().w==601)
+    assert(Tabbar.height()==(labels and 64 or 48))
+    nav:paintTo(Kit.canvas(),0,700)
+    local titles=Kit.find(nav,function(w)return w.text=="首页"end)
+    assert((#titles>0)==labels)
+    local taps=Kit.find(nav,function(w)return w.onTapThemeArea end)
+    taps[1]:onTapThemeArea(taps[1]);assert(not chosen)
+    taps[2]:onTapThemeArea(taps[2]);assert(chosen=="library")
    end)
   end
  end
 end
-check("paper-default-buttons-and-progress-use-RGB-drawing",function()
-  Kit.use("paper");local bb=Kit.canvas()
-  Button:new{text="开始阅读",variant="primary",width=220}:paintTo(bb,0,0)
-  Progress:new{width=220,percent=50}:paintTo(bb,0,100)
-  local count=0;for _,op in ipairs(bb.ops)do if rgb(op.c)and op.rgb_api then count=count+1 end end
-  assert(count>=3)
+check("explicit-native-hide-label-option-is-respected",function()
+    Engine.set("navbar_labels",true)
+    local nav=Tabbar.widget{width=600,tabs={{id="home",text="首页",icon="home"}},active="home",show_labels=false}
+    assert(#Kit.find(nav,function(w)return w.text=="首页"end)==0)
+    assert(#Kit.find(nav,function(w)return w.onMoonNavHold end)==1)
 end)
-check("headings-and-icons-colored-body-stays-black",function()
-  local Text=require("ui.themes.widgets.text");local Icon=require("ui.themes.widgets.icon")
-  assert(rgb(Text.line("title","图书馆").fgcolor));assert(Text.line("body","正文").fgcolor==0)
-  local widget=Icon.widget{name="settings",size=24}
-  local labels=Kit.find(widget,function(w)return w.fgcolor~=nil end);assert(rgb(labels[1].fgcolor))
+if Theme.color then
+ for _,theme in ipairs{"paper","bold","soft"}do
+  for _,preset in ipairs{"ocean","garden","clay"}do
+   check("official-color/"..theme.."/"..preset,function()
+    Kit.use(theme);Kit.color_enabled=true;Kit.display.theme_preset=preset
+    Engine.set("navbar_style","pill")
+    local original=Theme.current
+    local nav=Tabbar.widget{width=600,tabs={{id="home",text="首页",icon="home"}},active="home"}
+    local bb=Kit.canvas();nav:paintTo(bb,0,0)
+    local accent=Theme.current().color.navigation
+    assert(accent>255 and Theme.current==original)
+    local nodes=Kit.find(nav,function(w)return w.fgcolor==accent end);assert(#nodes>0)
+    local colored=false;for _,op in ipairs(bb.ops)do if op.rgb then colored=true end end
+    assert(colored,"native RGB drawing missing")
+    -- Changes made through official settings are picked up without Engine.reload.
+    Kit.display.theme_preset=preset=="ocean"and"clay"or"ocean"
+    local next_nav=Tabbar.widget{width=600,tabs={{id="home",text="首页",icon="home"}},active="home"}
+    assert(#Kit.find(next_nav,function(w)return w.fgcolor==Theme.current().color.navigation end)>0)
+   end)
+  end
+ end
+ Kit.color_enabled=false
+end
+check("loading-prefers-Moon-title-authors-and-local-cover",function()
+    metadata_rows["/cache/1.epub"]={source_id="local",stable_id="test",
+        book={title="月读书名",authors={"作者甲","作者乙"},cover="https://example.invalid/cover"}}
+    local m=Loading.metadata("/cache/1.epub",{title="旧书名",authors="旧作者"})
+    assert(m.title=="月读书名"and m.authors=="作者甲 · 作者乙"and m.cover=="/covers/local/test.png")
+    assert(Loading.metadata("/example.epub").title=="example")
 end)
-check("statistics-heatmap-and-chart-use-RGB",function()
-  assert(Engine.coverage.heatmap and Engine.coverage.chart)
-  local Heatmap=require("ui.widgets.heatmap")
-  local heat=Heatmap:new{width=70,cols={{{level=1},{level=2},{level=3},{level=4}}}}
-  local bb=Kit.canvas();heat:paintTo(bb,0,0)
-  for _,op in ipairs(bb.ops)do assert(op.rgb_api and rgb(op.c))end
-  local chart=require("ui.widgets.chart").bars{width=500,values={100,200,350},show_labels=false}
-  chart:paintTo(bb,0,150)
-  local found=false;for _,op in ipairs(bb.ops)do if op.rgb_api and rgb(op.c)then found=true end end;assert(found)
+check("initial-opening-paint-does-not-redraw-for-zero-or-tiny-progress",function()
+    Loading.finish();clock_time=100
+    local reader={};Reader.showReaderCoroutine(reader,"/cache/1.epub")
+    local card=reader.notice;card:paintTo(Kit.canvas(),0,0)
+    local before=#refreshes;local decoded_before=decoded;local reads=metadata_reads
+    local rolling={ui={document={file="/cache/1.epub"}}}
+    Rolling.showEngineProgress(rolling,0);clock_time=101;Rolling.showEngineProgress(rolling,.02)
+    assert(#refreshes==before,"initial repaint count "..#refreshes.." before "..before)
+    clock_time=102;Rolling.showEngineProgress(rolling,.1)
+    assert(#refreshes==before+1 and refreshes[#refreshes].h<800,
+        "partial repaint count "..#refreshes.." before "..before.." height "..tostring(refreshes[#refreshes]and refreshes[#refreshes].h))
+    clock_time=103;Rolling.showEngineProgress(rolling,.1);Rolling.showEngineProgress(rolling,.09)
+    assert(#refreshes==before+1)
+    assert(decoded==decoded_before and metadata_reads==reads)
+    clock_time=103.1;Rolling.showEngineProgress(rolling,1)
+    assert(card.bar.percent==100 and #refreshes==before+2)
+    Rolling.showEngineProgress(rolling,nil);assert(not rolling._moon_loading)
 end)
-check("book-progress-badge-color",function()
-  assert(Engine.coverage.book_badges)
-  local badge=require("ui.widgets.book").progressBadge(150,32)
-  local bb=Kit.canvas();badge:paintTo(bb,0,0);assert(bb.ops[1].rgb_api and rgb(bb.ops[1].c))
+check("new-document-does-not-inherit-previous-book-progress-throttle",function()
+    Loading.finish();clock_time=200
+    local a={ui={document={file="a.epub"}}};Rolling.showEngineProgress(a,.5)
+    local old=a._moon_loading
+    local b={ui={document={file="b.epub"}}};Rolling.showEngineProgress(b,.01)
+    assert(b._moon_loading and b._moon_loading~=old and not a._moon_loading)
+    assert(b._moon_loading.book.title=="b")
 end)
-check("real-FFI-RGB-type-is-detected",function()
-  local ffi=require("ffi");ffi.cdef[[typedef struct {uint8_t r,g,b,alpha;} MoonTestRGB;]]
-  local old=BB.ColorRGB32;BB.ColorRGB32=ffi.typeof("MoonTestRGB")
-  assert(require("mooncolor_render").isRGB(BB.ColorRGB32(20,80,150,255)))
-  BB.ColorRGB32=old
+check("screen-rotation-rebuilds-only-the-loading-card",function()
+    Loading.finish();clock_time=300
+    local a={ui={document={file="rotation.epub"}}};Rolling.showEngineProgress(a,.1)
+    local old=a._moon_loading
+    Kit.SCREEN_W,Kit.SCREEN_H=800,600;clock_time=300.1;Rolling.showEngineProgress(a,.11)
+    assert(a._moon_loading~=old and a._moon_loading.dimen.w==800 and a._moon_loading.dimen.h==600)
+    Loading.finish();Kit.SCREEN_W,Kit.SCREEN_H=600,800
 end)
-check("nav-height-change-forces-desktop-shell-rebuild",function()
-  local desk={_shell="old",updateView=function(self)assert(self._shell==nil)end}
-  Engine.set("navbar_labels",true,desk)
-  Engine.set("navbar_labels",false,desk)
+check("Info-constructor-restored-on-errors-and-only-first-notice-replaced",function()
+    Loading.finish()
+    local I=require("ui/widget/infomessage");local new=I.new
+    local a={extra=true};assert(Reader.showReaderCoroutine(a,"a.epub")=="opened")
+    assert(a.notice.covers_fullscreen and not a.extra_notice.covers_fullscreen and I.new==new)
+    a.raise=true;assert(not pcall(Reader.showReaderCoroutine,a,"error.epub"));assert(I.new==new)
 end)
-check("navbar-color-toggle-preserves-neutral-navigation",function()
-  Engine.set("tabs",false)
-  local nav=Tabbar.widget{width=600,tabs={{id="a",text="首页",icon="home"}},active="a"}
-  local bb=Kit.canvas();nav:paintTo(bb,0,0)
-  for _,op in ipairs(bb.ops)do assert(not rgb(op.c)) end
-  Engine.set("tabs",true)
+check("seamless-loaded-document-disabled-progress-keep-native-behavior",function()
+    local a={};Reader.showReaderCoroutine(a,"a.epub",nil,true);assert(not a.notice.covers_fullscreen)
+    local rolling={ui={document={file="a.epub",been_rendered=true}}}
+    Rolling.showEngineProgress(rolling,.5);assert(rolling.native_calls==1)
+    Engine.set("loading_screen",false);rolling.ui.document.been_rendered=false
+    Rolling.showEngineProgress(rolling,.5);assert(rolling.native_calls==2)
+    Engine.set("loading_screen",true)
 end)
-'''.replace('PLUGIN_ROOT', json.dumps(plugin)))
-
-lua.execute((ROOT / 'tests/v2.lua').read_text(encoding='utf-8'))
-if TESTING_V21:
-    lua.execute((ROOT / 'tests/v21.lua').read_text(encoding='utf-8'))
-    if any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.2.0','2.3.0','2.4.0']):
-        lua.execute((ROOT / 'tests/v22.lua').read_text(encoding='utf-8'))
-    if any(v in Path(plugin, '_meta.lua').read_text(encoding='utf-8') for v in ['2.3.0','2.4.0']):
-        import hashlib
-        lua.globals().python_sha256 = lambda text: hashlib.sha256(text.encode('utf-8')).hexdigest()
-        lua.execute((ROOT / 'tests/v23.lua').read_text(encoding='utf-8'))
-results = [dict(item.items()) for item in lua.globals().results.values()]
-if Path(plugin, 'mooncolor_quickpanel.lua').exists():
-    vm = LuaRuntime(unpack_returned_tuples=True)
-    vm.execute(f"package.path = '{moon}/tests/?.lua;{moon}/book.koplugin/?.lua;{moon}/book.koplugin/?/init.lua;{plugin}/?.lua;' .. package.path")
-    fixture = '''
-    quick_snapshot={page=42,total_pages=200,percent=21,reading_chapter_idx=1,
-        identity={book={title="百年孤独",authors="马尔克斯"}},
-        ui={toc={toc={{title="第一章",page=1}}}}}
-    toc_reads=0
-    package.loaded["reader.session"]={current=function()return quick_snapshot end,
-        bookPages=function()return quick_snapshot.page,quick_snapshot.total_pages end,
-        chapterIndex=function()toc_reads=toc_reads+1;return 1 end,
-        chapterTitle=function()toc_reads=toc_reads+1;return "第一章" end,
-        toc=function()toc_reads=toc_reads+1;return {{title="第一章"}} end}
-    '''
-    vm.execute(BOOT.replace('Engine = require("mooncolor_engine")',fixture+'\nEngine = require("mooncolor_engine")'))
-    core = (Path(os.environ['KOREADER_TEST_SOURCE']) / 'frontend/ui/widget/touchmenu.lua').read_text(encoding='utf-8')
-    switch = core[core.index('function TouchMenu:switchMenuTab('):core.index('function TouchMenu:backToUpperMenu(')]
-    vm.globals().native_switch_source = switch
-    vm.execute((ROOT / 'tests/v24.lua').read_text(encoding='utf-8'))
-    results.extend(dict(item.items()) for item in vm.globals().results.values())
-for scenario in ['rollback-and-retry', 'missing-moon']:
-    vm = LuaRuntime(unpack_returned_tuples=True)
-    vm.execute(f"package.path = '{moon}/tests/?.lua;{moon}/book.koplugin/?.lua;{moon}/book.koplugin/?/init.lua;{plugin}/?.lua;' .. package.path")
-    vm.execute(BOOT.replace('assert(Engine.install(), Engine.error)\nassert(Engine.active())', ''))
-    if scenario == 'rollback-and-retry':
-        vm.execute('''
-        local Row=require("ui.themes.widgets.row")
-        local real=Row.widget
-        Row.widget=function() end
-        local Theme=require("ui.themes")
-        local original=Theme.current
-        assert(not Engine.install());assert(Theme.current==original);assert(BB.Color8==original_color8)
-        Row.widget=real
-        assert(Engine.install(),Engine.error)
-        local Button=require("ui.themes.widgets.button")
-        local bb=Kit.canvas();Button:new{text="Retry",variant="primary",width=150}:paintTo(bb,0,0)
-        assert(type(bb.ops[1].c)=="table" and bb.ops[1].c.rgb)
-        ''')
-    else:
-        vm.execute('''
-        package.loaded["ui.themes"]=nil
-        package.preload["ui.themes"]=function() error("Moon not installed") end
-        assert(not Engine.install());assert(not Engine.active());assert(type(Engine.status())=="string")
-        ''')
-    results.append({'name': scenario, 'passed': True})
-report = {'runtime': 'LuaJIT 2.1 (lupa)', 'moon_source': moon,
-          'passed': len(results), 'cases': results,
-          'method': 'Actual Moon widgets/home/image queue/library/sidebar Lua; KOReader LineWidget/BottomContainer; FFI equality regression. Device, fonts, I/O, data and ReaderUI/ReaderRolling host interfaces are stubbed. RGB-specific paint assertions.',
-          'limitations': 'No hardware or on-device visual validation.'}
-(ROOT / 'test-results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-print(f"{len(results)} Moon Color integration checks passed")
+check("suspend-disable-and-exit-release-loading-once",function()
+    Loading.finish();local a={};Reader.showReaderCoroutine(a,"a.epub")
+    local card=a.notice;local old=card.free;local frees=0
+    card.free=function(self)frees=frees+1;return old(self)end
+    Engine.suspend();Engine.suspend();Loading.finish();assert(frees==1)
+    local r={ui={document={file="a.epub"}}};Rolling.showEngineProgress(r,.5);assert(not r._moon_loading)
+    Engine.resume();Engine.set("enabled",false)
+    Reader.showReaderCoroutine(a,"a.epub");assert(not a.notice.covers_fullscreen)
+    Engine.set("enabled",true)
+end)
+check("settings-only-show-navigation-loading-and-update",function()
+    local source=require("moon_source")
+    assert(source.id=="ext.mooncolor"and source.provides.source==false)
+    assert(not source.provides.features.panel)
+    local U=require("mooncolor_update")
+    local row=source.provides.features.setting.entries({})[1]
+    local sections=row.page.sections();assert(#sections==2)
+    assert(#sections[1].rows==4 and #sections[2].rows==3)
+end)
+''')
+lua.globals().python_sha256=lambda text:hashlib.sha256(text.encode('utf-8')).hexdigest()
+lua.execute((ROOT/'tests/update.lua').read_text(encoding='utf-8'))
+results=[dict(x.items())for x in lua.globals().results.values()]
+report={'version':'3.0.0','passed':len(results),'moon_source':moon,'cases':results,
+        'method':'Actual Moon widgets/themes and loading code; transport, filesystem, device, fonts and reader host boundaries stubbed.',
+        'limitations':'No device timing or waveform validation.'}
+(ROOT/'test-results.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+print(f"{len(results)} Moon Color 3.0 checks passed")

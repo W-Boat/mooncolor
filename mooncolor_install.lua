@@ -73,7 +73,8 @@ function Install.run(archive,root,digest,version)
     if ok then ok,err=extract(archive,staging)end
     local nextRoot=staging.."/"..DIR
     if ok then
-        for _,name in ipairs{"main.lua","_meta.lua","moon_source.lua","mooncolor_engine.lua","mooncolor_update.lua"}do
+        for _,name in ipairs{"main.lua","_meta.lua","moon_source.lua","mooncolor_engine.lua",
+            "mooncolor_nav.lua","mooncolor_loading.lua","mooncolor_update.lua","mooncolor_install.lua"}do
             if lfs.symlinkattributes(nextRoot.."/"..name,"mode")~="file"then ok,err=nil,"not a Moon Color archive";break end
         end
     end

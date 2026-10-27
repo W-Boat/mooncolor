@@ -1,59 +1,41 @@
 -- GPL-3.0-or-later
-local WidgetContainer = require("ui/widget/container/widgetcontainer")
-local MoonColor = WidgetContainer:extend{ name = "mooncolor", is_doc_only = false }
-
+local MoonColor=require("ui/widget/container/widgetcontainer"):extend{name="mooncolor",is_doc_only=false}
 function MoonColor:init()
-    if self.ui and self.ui.menu then self.ui.menu:registerToMainMenu(self) end
+    if self.ui and self.ui.menu then self.ui.menu:registerToMainMenu(self)end
     require("ui/uimanager"):nextTick(function()
-        local Engine = require("mooncolor_engine")
-        if Engine.install() then
-            local owner = self.ui and (self.ui.book or self.ui.moon)
-            Engine.refresh(owner and owner.desktop)
-            local Update=require("mooncolor_update")
-            Update.init(self.path)
-            if owner and owner.desktop then Update.schedule(owner.desktop)end
-        end
+        local Engine=require("mooncolor_engine")
+        if not Engine.install()then return end
+        local owner=self.ui and(self.ui.book or self.ui.moon)
+        Engine.refresh(owner and owner.desktop)
+        local Update=require("mooncolor_update")
+        Update.init(self.path)
+        if owner and owner.desktop then Update.schedule(owner.desktop)end
     end)
 end
-
 function MoonColor:addToMainMenu(items)
-    items.mooncolor = {
-        text = "Moon Color · 彩墨界面", sorting_hint = "more_tools",
-        callback = function()
-            local Engine = require("mooncolor_engine")
-            Engine.install()
-            require("ui/uimanager"):show(require("ui/widget/infomessage"):new{
-                text = "Moon Color " .. Engine.VERSION .. "\n" .. Engine.status()
-                    .. "\n\n设置入口：月读 → 设置 → 桌面 → 彩墨界面。\n需要支持 moon_source.lua 扩展和 ui.themes 的月读版本。",
-            })
-        end,
-    }
+    items.mooncolor={text="Moon Color · 界面增强",sorting_hint="more_tools",callback=function()
+        local Engine=require("mooncolor_engine");Engine.install()
+        require("ui/uimanager"):show(require("ui/widget/infomessage"):new{
+            text="Moon Color "..Engine.VERSION.."\n"..Engine.status()
+                .."\n\n月读 → 设置 → 桌面 → 底栏与开书遮罩。\n颜色请在月读官方显示设置中调整。"})
+    end}
 end
-
 function MoonColor:onSuspend()
-    local update=package.loaded.mooncolor_update
-    if update then update.onSuspend()end
-    local engine=package.loaded.mooncolor_engine
-    if engine and engine.suspend then engine.suspend()end
+    local Update=package.loaded.mooncolor_update;if Update then Update.onSuspend()end
+    local Engine=package.loaded.mooncolor_engine;if Engine then Engine.suspend()end
 end
 function MoonColor:onResume()
-    local engine=package.loaded.mooncolor_engine
-    if engine and engine.resume then engine.resume()end
+    local Engine=package.loaded.mooncolor_engine;if Engine then Engine.resume()end
 end
 function MoonColor:onReaderReady()
-    local loading=package.loaded.mooncolor_loading
-    if loading and loading.finish then loading.finish()end
+    local Loading=package.loaded.mooncolor_loading;if Loading then Loading.finish()end
 end
-function MoonColor:onCloseDocument()
-    self:onReaderReady()
-end
+MoonColor.onCloseDocument=MoonColor.onReaderReady
 function MoonColor:onNetworkConnected()
-    local update=package.loaded.mooncolor_update
-    if update then update.schedule()end
+    local Update=package.loaded.mooncolor_update;if Update then Update.schedule()end
 end
 function MoonColor:onExit()
-    local update=package.loaded.mooncolor_update
-    if update then update.onExit()end
+    self:onReaderReady()
+    local Update=package.loaded.mooncolor_update;if Update then Update.onExit()end
 end
-
 return MoonColor

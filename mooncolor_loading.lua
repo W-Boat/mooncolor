@@ -108,7 +108,9 @@ function Loading.make(file,metadata)
     return splash
 end
 local function sameFile(file)
-    return current and current.file==file and not current.closed
+    if not current or current.file~=file or current.closed then return false end
+    local screen=require("device").screen
+    return current.splash.dimen.w==screen:getWidth()and current.splash.dimen.h==screen:getHeight()
 end
 function Loading.finish()
     local state=current
@@ -133,7 +135,13 @@ local function begin(file,props)
     local splash=state.splash
     local paint=splash.paintTo
     splash.paintTo=function(self,...)
-        local result=paint(self,...);state.painted=true;return result
+        local result=paint(self,...)
+        if not state.painted then
+            state.last_at=require("socket").gettime()
+            state.last_percent=0
+        end
+        state.painted=true
+        return result
     end
     splash.onShow=function(self)
         if state.closed or state.timer then return end
@@ -166,8 +174,10 @@ function Loading.install(Engine,assign)
                 return original(self,file,provider,seamless)
             end
             local new=Info.new
+            local replaced=false
             Info.new=function(class,opts)
-                if opts and opts.timeout==0 and not opts.invisible then
+                if not replaced and opts and opts.timeout==0 and not opts.invisible then
+                    replaced=true
                     local ok,state=pcall(begin,file)
                     if ok then return state.splash end
                 end
@@ -192,10 +202,18 @@ function Loading.install(Engine,assign)
         local value=math.floor(math.max(0,math.min(1,percent))*100)
         local stamp=require("socket").gettime()
         local state=current
-        if state and state.last_at and (stamp-state.last_at<1 or math.abs(value-state.last_percent)<5)then return end
+        local file=self.ui.document.file
+        -- A new file/orientation must not inherit another book's throttle.
+        if not sameFile(file)then state=nil end
+        -- Cache writing may report a reverse progress tail; keep this card steady.
+        if state and state.last_percent then value=math.max(value,state.last_percent)end
+        if state and state.last_at then
+            local change=value-state.last_percent
+            if change<=0 then return end
+            if value<100 and(stamp-state.last_at<1 or change<5)then return end
+        end
         local ok=pcall(function()
-            local file=self.ui.document.file
-            if not state or (file and not sameFile(file))then state=begin(file,self.ui.doc_props)end
+            if not state then state=begin(file,self.ui.doc_props)end
             local splash=state.splash
             state.owner=self;self._moon_loading=splash
             splash.bar:setPercent(value)
